@@ -1,0 +1,649 @@
+.socket-debugger {
+  --socket-send: #db2777;
+  --socket-receive: #059669;
+  --socket-event: #64748b;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  height: calc(100vh - 190px);
+  min-height: 500px;
+  color: var(--text-main);
+}
+
+.socket-debugger button,
+.socket-debugger input,
+.socket-debugger textarea,
+.socket-debugger select {
+  letter-spacing: 0;
+}
+
+.socket-connect-strip,
+.socket-status-strip {
+  min-height: 54px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 11px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-surface);
+}
+
+.socket-protocol-switch,
+.socket-mode-switch,
+.socket-filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px;
+  border: 1px solid var(--border-color);
+  border-radius: 7px;
+  background: var(--bg-app);
+}
+
+.socket-protocol-switch {
+  flex: 0 0 auto;
+}
+
+.socket-protocol-btn,
+.socket-mode-btn,
+.socket-filter-btn {
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  font-weight: 650;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.socket-protocol-btn svg,
+.socket-filter-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+.socket-protocol-btn.active,
+.socket-mode-btn.active,
+.socket-filter-btn.active {
+  color: var(--accent-primary);
+  background: var(--bg-surface);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12);
+}
+
+.socket-protocol-btn:disabled,
+.socket-input:disabled {
+  opacity: 0.62;
+  cursor: not-allowed;
+}
+
+.socket-target {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.socket-input,
+.socket-preset-select,
+.socket-line-ending {
+  height: 36px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  outline: none;
+  background: var(--bg-app);
+  color: var(--text-main);
+  font-size: 0.8rem;
+}
+
+.socket-input {
+  min-width: 0;
+  padding: 0 10px;
+}
+
+.socket-input:focus,
+.socket-preset-select:focus,
+.socket-line-ending:focus,
+.socket-payload-editor:focus {
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.13);
+}
+
+.socket-url-input,
+.socket-host-input {
+  flex: 1;
+}
+
+.socket-protocol-input {
+  flex: 0 1 220px;
+}
+
+.socket-port-input {
+  flex: 0 0 92px;
+}
+
+.socket-target-separator {
+  color: var(--text-muted);
+  font-weight: 700;
+}
+
+.socket-connect-btn,
+.socket-send-btn {
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 15px;
+  border: 1px solid var(--accent-primary);
+  border-radius: 6px;
+  background: var(--accent-primary);
+  color: #fff;
+  font-size: 0.82rem;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.socket-connect-btn svg,
+.socket-send-btn svg {
+  width: 15px;
+  height: 15px;
+}
+
+.socket-connect-btn:hover,
+.socket-send-btn:hover {
+  background: var(--accent-primary-hover);
+}
+
+.socket-connect-btn.disconnect {
+  border-color: #dc2626;
+  background: transparent;
+  color: #dc2626;
+}
+
+.socket-connect-btn:disabled,
+.socket-send-btn:disabled {
+  border-color: var(--border-color);
+  background: var(--badge-bg);
+  color: var(--text-muted);
+  cursor: not-allowed;
+}
+
+.socket-status-strip {
+  min-height: 40px;
+  padding: 7px 12px;
+  justify-content: space-between;
+  background: var(--bg-app);
+}
+
+.socket-live-state,
+.socket-metrics,
+.socket-metrics span {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+}
+
+.socket-live-state {
+  gap: 8px;
+  font-size: 0.78rem;
+}
+
+.socket-state-dot {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 8px;
+  border-radius: 50%;
+  background: #94a3b8;
+}
+
+.socket-status-strip[data-state="connecting"] .socket-state-dot {
+  background: #f59e0b;
+  box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.12);
+}
+
+.socket-status-strip[data-state="connected"] .socket-state-dot {
+  background: #10b981;
+  box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.12);
+}
+
+.socket-endpoint {
+  overflow: hidden;
+  color: var(--text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.socket-metrics {
+  flex: 0 0 auto;
+  gap: 15px;
+}
+
+.socket-metrics span {
+  gap: 5px;
+  color: var(--text-muted);
+  font-size: 0.74rem;
+}
+
+.socket-metrics svg {
+  width: 13px;
+  height: 13px;
+}
+
+.socket-metrics b {
+  min-width: 42px;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.socket-workbench {
+  min-height: 0;
+  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(280px, 0.78fr) minmax(420px, 1.35fr);
+  grid-template-rows: minmax(220px, 1fr) minmax(170px, 0.8fr);
+  gap: 10px;
+}
+
+.socket-panel {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-surface);
+}
+
+.socket-compose-panel {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.socket-traffic-panel {
+  grid-column: 2;
+  grid-row: 1 / 3;
+}
+
+.socket-inspector-panel {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+.socket-panel-header {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 11px;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-app);
+}
+
+.socket-panel-title {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--text-main);
+  font-size: 0.82rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.socket-panel-title svg {
+  width: 15px;
+  height: 15px;
+  color: var(--text-secondary);
+}
+
+.socket-count {
+  min-width: 22px;
+  padding: 1px 6px;
+  border-radius: 9px;
+  background: var(--badge-bg);
+  color: var(--text-secondary);
+  text-align: center;
+  font-size: 0.68rem;
+}
+
+.socket-preset-select,
+.socket-line-ending {
+  height: 28px;
+  padding: 0 7px;
+  max-width: 130px;
+  font-size: 0.73rem;
+}
+
+.socket-panel-body {
+  min-height: 0;
+  flex: 1;
+  padding: 10px;
+}
+
+.socket-compose-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.socket-mode-switch {
+  align-self: flex-start;
+}
+
+.socket-mode-btn {
+  height: 27px;
+  padding: 0 9px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.7rem;
+}
+
+.socket-payload-editor {
+  width: 100%;
+  min-height: 92px;
+  flex: 1;
+  resize: none;
+  padding: 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  outline: none;
+  background: var(--bg-app);
+  color: var(--text-main);
+  font-size: 0.77rem;
+  line-height: 1.5;
+  user-select: text;
+}
+
+.socket-compose-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.socket-payload-size {
+  flex: 1;
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  text-align: right;
+}
+
+.socket-payload-size.invalid {
+  color: #dc2626;
+}
+
+.socket-send-btn {
+  height: 30px;
+  padding: 0 12px;
+  font-size: 0.76rem;
+}
+
+.socket-log-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.socket-autoscroll {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-right: 4px;
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  cursor: pointer;
+}
+
+.socket-autoscroll input {
+  accent-color: var(--accent-primary);
+}
+
+.socket-icon-btn {
+  width: 29px;
+  height: 29px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.socket-icon-btn:hover {
+  background: var(--bg-surface-hover);
+  color: var(--text-main);
+}
+
+.socket-icon-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+.socket-filter-bar {
+  margin: 8px 10px 0;
+  align-self: flex-start;
+}
+
+.socket-filter-btn {
+  height: 27px;
+  padding: 0 8px;
+  font-size: 0.69rem;
+}
+
+.socket-frame-list {
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+  padding: 8px 10px 10px;
+  user-select: text;
+}
+
+.socket-empty-log {
+  height: 100%;
+  min-height: 120px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--text-muted);
+  font-size: 0.76rem;
+}
+
+.socket-empty-log svg {
+  width: 28px;
+  height: 28px;
+  opacity: 0.5;
+}
+
+.socket-frame-row {
+  width: 100%;
+  min-height: 36px;
+  display: grid;
+  grid-template-columns: 22px 42px 60px minmax(0, 1fr) 54px;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 7px;
+  border: 0;
+  border-bottom: 1px solid var(--border-color);
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-main);
+  text-align: left;
+  cursor: pointer;
+}
+
+.socket-frame-row:hover {
+  background: var(--bg-surface-hover);
+}
+
+.socket-frame-row.selected {
+  background: var(--accent-primary-light);
+  box-shadow: inset 2px 0 var(--accent-primary);
+}
+
+.socket-frame-icon {
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  color: var(--socket-event);
+}
+
+.socket-frame-icon svg {
+  width: 13px;
+  height: 13px;
+}
+
+.socket-frame-row.sent .socket-frame-icon,
+.socket-meta-direction.sent {
+  color: var(--socket-send);
+  background: rgba(219, 39, 119, 0.1);
+}
+
+.socket-frame-row.received .socket-frame-icon,
+.socket-meta-direction.received {
+  color: var(--socket-receive);
+  background: rgba(5, 150, 105, 0.1);
+}
+
+.socket-frame-row.error .socket-frame-icon {
+  color: #dc2626;
+}
+
+.socket-frame-direction,
+.socket-frame-time,
+.socket-frame-size {
+  color: var(--text-muted);
+  font-size: 0.64rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.socket-frame-row.sent .socket-frame-direction {
+  color: var(--socket-send);
+}
+
+.socket-frame-row.received .socket-frame-direction {
+  color: var(--socket-receive);
+}
+
+.socket-frame-preview {
+  overflow: hidden;
+  color: var(--text-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.72rem;
+}
+
+.socket-frame-size {
+  text-align: right;
+}
+
+.socket-inspector-meta {
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px 0;
+  overflow: hidden;
+}
+
+.socket-inspector-meta span {
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--badge-bg);
+  color: var(--text-muted);
+  font-size: 0.64rem;
+  white-space: nowrap;
+}
+
+.socket-inspector-tabs {
+  margin: 7px 10px 0;
+}
+
+.socket-inspector-content {
+  min-height: 0;
+  flex: 1;
+  margin: 7px 10px 10px;
+  padding: 9px;
+  overflow: auto;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--bg-app);
+  color: var(--text-secondary);
+  font-size: 0.69rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+@media (max-width: 960px) {
+  .socket-debugger {
+    height: auto;
+    min-height: 0;
+  }
+
+  .socket-connect-strip {
+    align-items: stretch;
+    flex-wrap: wrap;
+  }
+
+  .socket-protocol-switch {
+    width: 100%;
+  }
+
+  .socket-protocol-btn {
+    flex: 1;
+  }
+
+  .socket-workbench {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .socket-panel {
+    min-height: 280px;
+  }
+
+  .socket-traffic-panel {
+    min-height: 420px;
+  }
+}
+
+@media (max-width: 720px) {
+  .socket-target-ws {
+    flex-wrap: wrap;
+  }
+
+  .socket-protocol-input {
+    flex-basis: 100%;
+  }
+
+  .socket-status-strip {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .socket-frame-row {
+    grid-template-columns: 22px 42px minmax(0, 1fr) 48px;
+  }
+
+  .socket-frame-time {
+    display: none;
+  }
+}

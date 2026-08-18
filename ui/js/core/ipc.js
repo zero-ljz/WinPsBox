@@ -8,6 +8,7 @@
 // ==========================================
 const IPC = {
   callbacks: new Map(),
+  mockTcpSessions: new Map(),
   reqCounter: 0,
   isWebView: Boolean(window.chrome && window.chrome.webview),
 
@@ -51,7 +52,7 @@ const IPC = {
       // Timeout safeguard
       const timeoutMs = action === 'winget_package_action'
         ? 15 * 60 * 1000
-        : (action.startsWith('winget_') || action === 'net_http_request' || action === 'net_ping' || action === 'net_check_remote_port' || action === 'net_trace_route' || action === 'net_scan_lan')
+        : (action.startsWith('winget_') || action.startsWith('cert_') || action === 'net_http_request' || action === 'net_ping' || action === 'net_check_remote_port' || action === 'net_trace_route' || action === 'net_scan_lan' || action === 'net_dns_deep_diagnostic' || action === 'net_intel_lookup')
           ? 60000
           : 15000;
       setTimeout(() => {
@@ -141,6 +142,159 @@ const IPC = {
             sizeBytes: 128
           });
           break;
+        case 'net_tcp_connect': {
+          const sessionId = `mock_tcp_${Date.now()}`;
+          this.mockTcpSessions.set(sessionId, []);
+          resolve({
+            success: true,
+            sessionId,
+            localEndpoint: '127.0.0.1:51820',
+            remoteEndpoint: `${payload.host}:${payload.port}`,
+            connectedAt: new Date().toISOString()
+          });
+          break;
+        }
+        case 'net_tcp_send': {
+          const queue = this.mockTcpSessions.get(payload.sessionId);
+          if (!queue) {
+            reject(new Error('TCP session was not found.'));
+            break;
+          }
+          queue.push(payload.dataBase64 || '');
+          resolve({ success: true, bytes: atob(payload.dataBase64 || '').length });
+          break;
+        }
+        case 'net_tcp_receive': {
+          const queue = this.mockTcpSessions.get(payload.sessionId);
+          if (!queue) {
+            resolve({ success: true, connected: false, closed: true, bytes: 0, dataBase64: '' });
+            break;
+          }
+          const dataBase64 = queue.shift() || '';
+          resolve({ success: true, connected: true, closed: false, bytes: dataBase64 ? atob(dataBase64).length : 0, dataBase64 });
+          break;
+        }
+        case 'net_tcp_disconnect':
+          this.mockTcpSessions.delete(payload.sessionId);
+          resolve({ success: true, connected: false });
+          break;
+        case 'cert_get_defaults':
+          resolve({
+            computerName: 'DEV-WORKSTATION',
+            sans: ['localhost', '127.0.0.1', '::1', 'dev-workstation', '192.168.1.108'],
+            outputDirectory: 'C:\\DevToolsBox\\data\\certificates'
+          });
+          break;
+        case 'cert_get_ca_status': {
+          const exists = localStorage.getItem('mock_ca_exists') === 'true';
+          resolve({
+            exists,
+            subject: 'CN=DevTools Box Local Root CA',
+            thumbprint: exists ? '8F42C1A07E54D56D2D408A925F97C40A21B90077' : '',
+            validFrom: exists ? '2026-08-18 19:40:00' : '',
+            validTo: exists ? '2036-08-18 19:40:00' : '',
+            trustedCurrentUser: exists,
+            trustedLocalMachine: false,
+            outputDirectory: 'C:\\DevToolsBox\\data\\certificates',
+            isAdmin: false
+          });
+          break;
+        }
+        case 'cert_create_root_ca': {
+          localStorage.setItem('mock_ca_exists', 'true');
+          resolve({
+            success: true,
+            trustScope: payload.trustScope,
+            cerPath: 'C:\\DevToolsBox\\data\\certificates\\devtools-box-local-root-ca.cer',
+            pemPath: 'C:\\DevToolsBox\\data\\certificates\\devtools-box-local-root-ca.pem',
+            status: {
+              exists: true,
+              subject: 'CN=DevTools Box Local Root CA',
+              thumbprint: '8F42C1A07E54D56D2D408A925F97C40A21B90077',
+              validFrom: '2026-08-18 19:40:00',
+              validTo: '2036-08-18 19:40:00',
+              trustedCurrentUser: payload.trustScope !== 'LocalMachine',
+              trustedLocalMachine: payload.trustScope === 'LocalMachine',
+              outputDirectory: 'C:\\DevToolsBox\\data\\certificates',
+              isAdmin: false
+            }
+          });
+          break;
+        }
+        case 'cert_generate_server': {
+          const commonName = payload.commonName || 'localhost';
+          const folder = `C:\\DevToolsBox\\data\\certificates\\${commonName}-20260818-194200`;
+          resolve({
+            success: true,
+            commonName,
+            thumbprint: '73F7B850B2A36C624E024FE4541EA68AE51ECF09',
+            issuer: 'CN=DevTools Box Local Root CA',
+            validFrom: '2026-08-18 19:42:00',
+            validTo: '2027-09-20 19:42:00',
+            sans: (payload.sans || []).map(value => ({ type: /^\d|:/.test(value) ? 'IP' : 'DNS', value })),
+            folder,
+            pfxPath: `${folder}\\${commonName}.pfx`,
+            cerPath: `${folder}\\${commonName}.cer`,
+            pemPath: `${folder}\\${commonName}.pem`,
+            chainPath: `${folder}\\${commonName}-chain.pem`
+          });
+          break;
+        }
+        case 'cert_open_folder':
+          resolve({ success: true, path: payload.path });
+          break;
+        case 'net_dns_deep_diagnostic':
+          resolve({
+            success: true,
+            name: payload.name || 'example.com',
+            recordType: payload.recordType || 'A',
+            records: [
+              { name: payload.name || 'example.com', type: 'A', ttl: 248, section: 'Answer', value: '104.20.34.220' },
+              { name: payload.name || 'example.com', type: 'A', ttl: 248, section: 'Answer', value: '172.66.144.113' },
+              { name: payload.name || 'example.com', type: 'AAAA', ttl: 248, section: 'Answer', value: '2606:4700:10::6814:22dc' },
+              { name: payload.name || 'example.com', type: 'MX', ttl: 3600, section: 'Answer', value: '10 mail.example.com' },
+              { name: payload.name || 'example.com', type: 'TXT', ttl: 3600, section: 'Answer', value: 'v=spf1 -all' }
+            ],
+            recordErrors: [],
+            comparison: {
+              mismatch: false,
+              consensusAnswers: ['104.20.34.220', '172.66.144.113'],
+              consensusCount: 4,
+              respondingCount: 4,
+              providers: [
+                { name: '114 DNS', server: '114.114.114.114', success: true, latencyMs: 12.4, answers: ['104.20.34.220', '172.66.144.113'], error: '' },
+                { name: 'AliDNS', server: '223.5.5.5', success: true, latencyMs: 6.8, answers: ['104.20.34.220', '172.66.144.113'], error: '' },
+                { name: 'Google', server: '8.8.8.8', success: true, latencyMs: 28.3, answers: ['104.20.34.220', '172.66.144.113'], error: '' },
+                { name: 'Cloudflare', server: '1.1.1.1', success: true, latencyMs: 21.7, answers: ['104.20.34.220', '172.66.144.113'], error: '' }
+              ]
+            },
+            doh: [
+              { name: 'Cloudflare DoH', endpoint: 'https://cloudflare-dns.com/dns-query', success: true, status: 0, latencyMs: 96.2, answers: [{ name: 'example.com.', type: 'A', ttl: 248, value: '104.20.34.220' }], error: '' },
+              { name: 'Google DoH', endpoint: 'https://dns.google/resolve', success: true, status: 0, latencyMs: 132.5, answers: [{ name: 'example.com.', type: 'A', ttl: 248, value: '104.20.34.220' }], error: '' },
+              { name: 'AliDNS DoH', endpoint: 'https://dns.alidns.com/resolve', success: true, status: 0, latencyMs: 48.6, answers: [{ name: 'example.com.', type: 'A', ttl: 248, value: '104.20.34.220' }], error: '' }
+            ],
+            diagnosedAt: new Date().toLocaleString('zh-CN', { hour12: false })
+          });
+          break;
+        case 'net_intel_lookup': {
+          const isDomain = /[a-z]/i.test(payload.target || '');
+          resolve({
+            success: true,
+            query: payload.target,
+            queryType: isDomain ? 'domain' : 'ip',
+            domain: isDomain ? payload.target : '',
+            primaryIp: '1.1.1.1',
+            resolvedIps: ['1.1.1.1', '1.0.0.1'],
+            geo: { country: 'Australia', countryCode: 'AU', region: 'Queensland', city: 'South Brisbane', postal: '4101', latitude: -27.4766, longitude: 153.0166, timezone: 'Australia/Brisbane' },
+            network: { asn: 13335, organization: 'Cloudflare, Inc.', isp: 'Cloudflare', domain: 'cloudflare.com', prefix: '1.1.1.0/24', holder: 'CLOUDFLARENET', announced: true },
+            classification: { code: 'cdn', confidence: 'high', reasons: ['ASN or organization matches a known CDN'] },
+            domainRdap: isDomain ? { kind: 'domain', handle: 'EXAMPLE-COM', name: payload.target, status: ['active'], registrar: 'Example Registrar, Inc.', registeredAt: '1995-08-14T04:00:00Z', expiresAt: '2027-08-13T04:00:00Z', changedAt: '2025-08-14T07:01:39Z', nameservers: ['A.IANA-SERVERS.NET', 'B.IANA-SERVERS.NET'], dnssec: true, entities: [] } : null,
+            networkRdap: { kind: 'network', handle: 'APNIC-LABS', name: 'APNIC-LABS', type: 'ASSIGNED PORTABLE', country: 'AU', startAddress: '1.1.1.0', endAddress: '1.1.1.255', status: ['active'], changedAt: '2023-04-26T05:41:02Z', entities: [] },
+            sourceErrors: [],
+            queriedAt: new Date().toLocaleString('zh-CN', { hour12: false })
+          });
+          break;
+        }
 
         // Mock System Tools
         case 'sys_get_env_vars':

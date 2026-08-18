@@ -141,6 +141,55 @@ function Register-AppWebViewHandlers($webView) {
                             $response.error = $res.error
                         }
                     }
+
+                    # Local development certificates
+                    "cert_get_defaults" {
+                        $response.data = Get-LocalDevCertificateDefaults
+                    }
+                    "cert_get_ca_status" {
+                        $response.data = Get-LocalDevCaStatus
+                    }
+                    "cert_create_root_ca" {
+                        $res = New-LocalDevRootCa -trustScope ([string]$payload.trustScope)
+                        if ($res.success) { $response.data = $res } else { $response.success = $false; $response.error = $res.error }
+                    }
+                    "cert_generate_server" {
+                        $res = New-LocalDevServerCertificate `
+                            -commonName ([string]$payload.commonName) `
+                            -sanEntries @($payload.sans) `
+                            -validDays ([int]$payload.validDays) `
+                            -pfxPassword ([string]$payload.pfxPassword)
+                        if ($res.success) { $response.data = $res } else { $response.success = $false; $response.error = $res.error }
+                    }
+                    "cert_open_folder" {
+                        $res = Open-LocalCertificateFolder -path ([string]$payload.path)
+                        if ($res.success) { $response.data = $res } else { $response.success = $false; $response.error = $res.error }
+                    }
+                    "net_tcp_connect" {
+                        $timeout = if ($payload.timeoutMs) { [int]($payload.timeoutMs) } else { 5000 }
+                        $res = Connect-DebugTcpSocket -hostName ([string]$payload.host) -port ([int]$payload.port) -timeoutMs $timeout
+                        if ($res.success) { $response.data = $res } else { $response.success = $false; $response.error = $res.error }
+                    }
+                    "net_tcp_send" {
+                        $res = Send-DebugTcpSocket -sessionId ([string]$payload.sessionId) -dataBase64 ([string]$payload.dataBase64)
+                        if ($res.success) { $response.data = $res } else { $response.success = $false; $response.error = $res.error }
+                    }
+                    "net_tcp_receive" {
+                        $maxBytes = if ($payload.maxBytes) { [int]$payload.maxBytes } else { 65536 }
+                        $res = Receive-DebugTcpSocket -sessionId ([string]$payload.sessionId) -maxBytes $maxBytes
+                        if ($res.success) { $response.data = $res } else { $response.success = $false; $response.data = $res; $response.error = $res.error }
+                    }
+                    "net_tcp_disconnect" {
+                        $response.data = Disconnect-DebugTcpSocket -sessionId ([string]$payload.sessionId)
+                    }
+                    "net_dns_deep_diagnostic" {
+                        $res = Invoke-DeepDnsDiagnostic -name ([string]$payload.name) -recordType ([string]$payload.recordType)
+                        if ($res.success) { $response.data = $res } else { $response.success = $false; $response.error = $res.error }
+                    }
+                    "net_intel_lookup" {
+                        $res = Get-NetworkIntelligence -target ([string]$payload.target)
+                        if ($res.success) { $response.data = $res } else { $response.success = $false; $response.error = $res.error }
+                    }
     
                     # 1. NetAdapter & DNS
                     "net_get_adapters" {

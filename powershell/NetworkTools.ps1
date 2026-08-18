@@ -1051,3 +1051,124 @@ function Invoke-TraceRouteAction([string]$targetHost, [int]$maxHops = 20, [int]$
         hops = $hops
     }
 }
+
+# ----------------- TCP Socket Debugger -----------------
+$script:TcpDebugSessions = @{}
+
+function Connect-DebugTcpSocket([string]$hostName, [int]$port, [int]$timeoutMs = 5000) {
+    if ([string]::IsNullOrWhiteSpace($hostName)) {
+        return @{ success = $false; error = "Host is required." }
+    }
+    if ($port -lt 1 -or $port -gt 65535) {
+        return @{ success = $false; error = "Port must be between 1 and 65535." }
+    }
+
+    $client = New-Object System.Net.Sockets.TcpClient
+    $client.NoDelay = $true
+    try {
+        $connectResult = $client.BeginConnect($hostName.Trim(), $port, $null, $null)
+        if (-not $connectResult.AsyncWaitHandle.WaitOne([math]::Max(250, $timeoutMs))) {
+            $connectResult.AsyncWaitHandle.Close()
+            $client.Close()
+            return @{ success = $false; error = "Connection timed out." }
+        }
+
+        $client.EndConnect($connectResult)
+        $connectResult.AsyncWaitHandle.Close()
+        $sessionId = [guid]::NewGuid().ToString("N")
+        $script:TcpDebugSessions[$sessionId] = @{
+            client = $client
+            stream = $client.GetStream()
+            connectedAt = [DateTime]::UtcNow
+        }
+
+        return @{
+            success = $true
+            sessionId = $sessionId
+            localEndpoint = $client.Client.LocalEndPoint.ToString()
+            remoteEndpoint = $client.Client.RemoteEndPoint.ToString()
+            connectedAt = [DateTime]::UtcNow.ToString("o")
+        }
+    }
+    catch {
+        try { $client.Close() } catch { }
+        return @{ success = $false; error = $_.Exception.Message }
+    }
+}
+
+function Send-DebugTcpSocket([string]$sessionId, [string]$dataBase64) {
+    if (-not $script:TcpDebugSessions.ContainsKey($sessionId)) {
+        return @{ success = $false; error = "TCP session was not found." }
+    }
+
+    try {
+        $bytes = [Convert]::FromBase64String($dataBase64)
+        $session = $script:TcpDebugSessions[$sessionId]
+        if (-not $session.client.Connected) { throw "TCP socket is disconnected." }
+        $session.stream.Write($bytes, 0, $bytes.Length)
+        $session.stream.Flush()
+        return @{ success = $true; bytes = $bytes.Length }
+    }
+    catch {
+        Disconnect-DebugTcpSocket -sessionId $sessionId | Out-Null
+        return @{ success = $false; error = $_.Exception.Message }
+    }
+}
+
+function Receive-DebugTcpSocket([string]$sessionId, [int]$maxBytes = 65536) {
+    if (-not $script:TcpDebugSessions.ContainsKey($sessionId)) {
+        return @{ success = $false; connected = $false; closed = $true; error = "TCP session was not found." }
+    }
+
+    $session = $script:TcpDebugSessions[$sessionId]
+    $client = $session.client
+    try {
+        $available = $client.Available
+        if ($available -le 0) {
+            $isClosed = $client.Client.Poll(0, [System.Net.Sockets.SelectMode]::SelectRead)
+            if ($isClosed) {
+                Disconnect-DebugTcpSocket -sessionId $sessionId | Out-Null
+                return @{ success = $true; connected = $false; closed = $true; bytes = 0; dataBase64 = "" }
+            }
+            return @{ success = $true; connected = $true; closed = $false; bytes = 0; dataBase64 = "" }
+        }
+
+        $readSize = [math]::Min([math]::Max(1, $maxBytes), $available)
+        $buffer = New-Object byte[] $readSize
+        $read = $session.stream.Read($buffer, 0, $readSize)
+        if ($read -le 0) {
+            Disconnect-DebugTcpSocket -sessionId $sessionId | Out-Null
+            return @{ success = $true; connected = $false; closed = $true; bytes = 0; dataBase64 = "" }
+        }
+
+        if ($read -ne $buffer.Length) {
+            $payload = New-Object byte[] $read
+            [Array]::Copy($buffer, $payload, $read)
+        } else {
+            $payload = $buffer
+        }
+
+        return @{
+            success = $true
+            connected = $true
+            closed = $false
+            bytes = $read
+            dataBase64 = [Convert]::ToBase64String($payload)
+        }
+    }
+    catch {
+        $errorMessage = $_.Exception.Message
+        Disconnect-DebugTcpSocket -sessionId $sessionId | Out-Null
+        return @{ success = $false; connected = $false; closed = $true; error = $errorMessage }
+    }
+}
+
+function Disconnect-DebugTcpSocket([string]$sessionId) {
+    if ($script:TcpDebugSessions.ContainsKey($sessionId)) {
+        $session = $script:TcpDebugSessions[$sessionId]
+        try { $session.stream.Dispose() } catch { }
+        try { $session.client.Close() } catch { }
+        $script:TcpDebugSessions.Remove($sessionId)
+    }
+    return @{ success = $true; connected = $false }
+}

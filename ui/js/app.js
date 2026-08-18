@@ -38,6 +38,10 @@ const ToolRegistry = {
     { id: 'port-checker', title: '端口占用与探测', category: 'network', categoryName: '网络工具', icon: 'activity', desc: '检测本地端口占用进程，或测试远程 IP / 域名的 TCP 端口连通性', tags: ['探测', '网络', '端口'] },
     { id: 'ping-mtr', title: 'Ping & 网络诊断', category: 'network', categoryName: '网络工具', icon: 'wifi', desc: '实时 Ping 延迟检测与 DNS 解析诊断，提供网络质量可视化统计', tags: ['探测', '网络', '诊断'] },
     { id: 'curl-builder', title: 'cURL / HTTP 调试台', category: 'network', categoryName: '网络工具', icon: 'send', desc: '可视化构造 GET/POST 请求，生成标准 cURL 命令与真实无跨域请求', tags: ['网络', '调试', 'HTTP'] },
+    { id: 'socket-debugger', title: 'WebSocket / Socket 调试台', category: 'network', categoryName: '网络工具', icon: 'radio-tower', desc: '实时调试 WebSocket 与 TCP 长连接，支持文本、Hex、Base64 数据和收发帧检查', tags: ['网络', '调试', 'WebSocket', 'TCP'] },
+    { id: 'local-cert-generator', title: '本地 CA 与多域名证书生成器', category: 'network', categoryName: '网络工具', icon: 'badge-check', desc: '创建并信任本地 Root CA，为 localhost、局域网 IP 与测试域名签发 SAN HTTPS 证书', tags: ['安全', '证书', 'HTTPS', '开发'] },
+    { id: 'dns-deep-diagnostic', title: 'DNS / DoH 深度解析诊断', category: 'network', categoryName: '网络工具', icon: 'scan-line', desc: '解析完整 DNS 记录，对比公共解析器与 DoH 响应，识别结果分歧和污染迹象', tags: ['网络', 'DNS', 'DoH', '诊断'] },
+    { id: 'ip-whois-intel', title: 'IP 归属地与 Whois 情报', category: 'network', categoryName: '网络工具', icon: 'map-pinned', desc: '聚合 IP 地理位置、ASN/BGP、网络类型判断与域名 RDAP/Whois 注册信息', tags: ['网络', 'IP', 'Whois', '情报'] },
 
     // System tools (Fully implemented)
     { id: 'service-manager', title: 'Windows 服务管理器', category: 'system', categoryName: '系统运维', icon: 'sliders', desc: '检索所有 Windows 系统服务，支持一键启动/停止/重启与修改自启动模式', tags: ['系统', '服务', '运维', 'Windows'] },
@@ -237,6 +241,18 @@ const ToolRegistry = {
         case 'curl-builder':
           CurlTool.render(mount);
           break;
+        case 'socket-debugger':
+          SocketDebuggerTool.render(mount);
+          break;
+        case 'local-cert-generator':
+          LocalCertificateTool.render(mount);
+          break;
+        case 'dns-deep-diagnostic':
+          DnsDeepDiagnosticTool.render(mount);
+          break;
+        case 'ip-whois-intel':
+          IpWhoisIntelligenceTool.render(mount);
+          break;
 
         // System Tools
         case 'service-manager':
@@ -420,6 +436,9 @@ const AppNavigation = {
 
   switchView(viewName) {
     const appContent = document.querySelector('.app-content');
+    if (this.currentView === 'workspace' && viewName !== 'workspace' && ToolRegistry.activeTool?.id === 'socket-debugger') {
+      SocketDebuggerTool.destroy();
+    }
     if (appContent && this.currentView === 'tools' && viewName !== 'tools') {
       this.toolsScrollTop = appContent.scrollTop;
     }
