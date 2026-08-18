@@ -1,20 +1,384 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-bs-theme="light">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Demo</title>
+  <title>DevTools Box - 工具箱</title>
   <link rel="stylesheet" href="./vendor/bootstrap/bootstrap.min.css">
   <link rel="stylesheet" href="./css/app.css">
 </head>
-<body class="container py-4">
-  <h1>Hello WebView2</h1>
+<body>
+  <div class="app-container">
+    <!-- Left Sidebar -->
+    <aside class="app-sidebar">
+      <div class="sidebar-header">
+        <div class="brand-icon">
+          <i data-lucide="boxes"></i>
+        </div>
+        <div class="brand-info">
+          <span class="brand-title">DevTools Box</span>
+          <span class="brand-subtitle">轻量桌面工具箱模板</span>
+        </div>
+      </div>
 
+      <div class="sidebar-content">
+        <div class="nav-section-title">工具分类</div>
+        <ul class="sidebar-nav-list" id="sidebarNavList">
+          <li>
+            <button class="nav-item-btn active" data-category="all">
+              <span class="nav-item-content">
+                <i data-lucide="layout-grid"></i>
+                <span>全部工具</span>
+              </span>
+              <span class="nav-count-badge" id="count-all">0</span>
+            </button>
+          </li>
+          <li>
+            <button class="nav-item-btn" data-category="fav">
+              <span class="nav-item-content">
+                <i data-lucide="star"></i>
+                <span>常用收藏</span>
+              </span>
+              <span class="nav-count-badge" id="count-fav">0</span>
+            </button>
+          </li>
+          <li>
+            <button class="nav-item-btn" data-category="dev">
+              <span class="nav-item-content">
+                <i data-lucide="code-2"></i>
+                <span>开发辅助</span>
+              </span>
+              <span class="nav-count-badge" id="count-dev">0</span>
+            </button>
+          </li>
+          <li>
+            <button class="nav-item-btn" data-category="text">
+              <span class="nav-item-content">
+                <i data-lucide="file-text"></i>
+                <span>文本处理</span>
+              </span>
+              <span class="nav-count-badge" id="count-text">0</span>
+            </button>
+          </li>
+          <li>
+            <button class="nav-item-btn" data-category="network">
+              <span class="nav-item-content">
+                <i data-lucide="globe"></i>
+                <span>网络工具</span>
+              </span>
+              <span class="nav-count-badge" id="count-network">0</span>
+            </button>
+          </li>
+          <li>
+            <button class="nav-item-btn" data-category="system">
+              <span class="nav-item-content">
+                <i data-lucide="terminal-square"></i>
+                <span>系统运维</span>
+              </span>
+              <span class="nav-count-badge" id="count-system">0</span>
+            </button>
+          </li>
+        </ul>
+      </div>
+
+      <div class="sidebar-footer">
+        <button class="nav-item-btn" id="btnNavSettings">
+          <span class="nav-item-content">
+            <i data-lucide="settings"></i>
+            <span>系统设置</span>
+          </span>
+        </button>
+      </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="app-main">
+      <!-- Header -->
+      <header class="app-header">
+        <div class="header-left">
+          <h1 class="header-category-title" id="headerTitle">
+            <i data-lucide="layout-grid" id="headerTitleIcon"></i>
+            <span id="headerTitleText">全部工具</span>
+          </h1>
+        </div>
+
+        <div class="header-right">
+          <!-- Search Bar -->
+          <div class="search-wrapper" id="searchWrapper">
+            <i data-lucide="search" class="search-icon"></i>
+            <input type="text" class="search-input" id="toolSearchInput" placeholder="快速搜索工具 (拼音/关键词)..." autocomplete="off">
+            <kbd class="kbd-shortcut">Ctrl+K</kbd>
+          </div>
+
+          <!-- Privilege Mode Badge / Trigger -->
+          <button class="header-btn privilege-btn" id="btnAppPrivilege" title="查看运行权限 / 点击申请管理员权限">
+            <i data-lucide="shield" id="privilegeIcon"></i>
+            <span id="privilegeText">普通模式</span>
+          </button>
+
+          <!-- Quick Theme Switcher Button -->
+          <button class="header-btn" id="btnQuickTheme" title="切换主题">
+            <i data-lucide="sun" id="quickThemeIcon"></i>
+            <span id="quickThemeText">浅色</span>
+          </button>
+
+          <!-- Settings Header Button -->
+          <button class="header-btn" id="btnHeaderSettings" title="打开设置">
+            <i data-lucide="sliders-horizontal"></i>
+          </button>
+        </div>
+      </header>
+
+      <!-- Scrollable Main View Container -->
+      <div class="app-content">
+        <!-- 1. Tools Grid View -->
+        <section id="viewTools" class="view-section">
+          <div class="category-hero">
+            <div class="hero-info">
+              <h2 id="heroTitle">全部工具</h2>
+              <p id="heroSubtitle">集合开发、文本、网络与系统相关实用功能</p>
+            </div>
+            <div class="tag-chips" id="tagChipsContainer">
+              <span class="tag-chip active" data-tag="all">全部标签</span>
+              <span class="tag-chip" data-tag="网络">网络</span>
+              <span class="tag-chip" data-tag="系统">系统</span>
+              <span class="tag-chip" data-tag="DNS">DNS</span>
+              <span class="tag-chip" data-tag="安全">安全</span>
+              <span class="tag-chip" data-tag="运维">运维</span>
+              <span class="tag-chip" data-tag="硬件">硬件</span>
+              <span class="tag-chip" data-tag="探测">探测</span>
+              <span class="tag-chip" data-tag="格式化">格式化</span>
+              <span class="tag-chip" data-tag="编解码">编解码</span>
+              <span class="tag-chip" data-tag="快捷">快捷</span>
+            </div>
+          </div>
+
+          <!-- Tools Card Grid -->
+          <div class="tool-grid" id="toolGrid">
+            <!-- Dynamic Tool Cards will be inserted here -->
+          </div>
+
+          <!-- Empty search / category state -->
+          <div class="empty-state d-none" id="emptyState">
+            <i data-lucide="search-x" class="empty-state-icon"></i>
+            <h3>未找到相关工具</h3>
+            <p>尝试更换关键词或清除标签筛选条件</p>
+          </div>
+        </section>
+
+        <!-- 2. Tool Workspace View -->
+        <section id="viewWorkspace" class="view-section d-none workspace-view">
+          <div class="workspace-header">
+            <div class="workspace-title-group">
+              <button class="btn-back" id="btnBackToGrid">
+                <i data-lucide="arrow-left"></i>
+                <span>返回列表</span>
+              </button>
+              <div class="d-flex align-items-center gap-2">
+                <div class="tool-icon-wrapper" id="wsToolIcon">
+                  <i data-lucide="code-2"></i>
+                </div>
+                <div>
+                  <div class="d-flex align-items-center gap-2">
+                    <h3 class="m-0 fw-bold fs-5" id="wsToolTitle">工具名称</h3>
+                    <span class="tool-badge" id="wsToolCategory">分类</span>
+                  </div>
+                  <small class="text-secondary" id="wsToolDesc">工具描述信息</small>
+                </div>
+              </div>
+            </div>
+
+            <div class="d-flex align-items-center gap-2">
+              <button class="btn-star" id="wsBtnStar" title="收藏此工具">
+                <i data-lucide="star"></i>
+              </button>
+            </div>
+          </div>
+
+          <!-- Dynamic Tool Container -->
+          <div id="workspaceToolMount" class="w-100 flex-grow-1"></div>
+        </section>
+
+        <!-- 3. Settings View -->
+        <section id="viewSettings" class="view-section d-none settings-view">
+          <!-- Startup Settings -->
+          <div class="settings-card">
+            <div class="settings-card-title">
+              <i data-lucide="power"></i>
+              <span>系统与启动设置</span>
+            </div>
+            <div class="settings-card-desc">配置应用程序在 Windows 系统中的运行与启动行为</div>
+
+            <div class="settings-row">
+              <div class="settings-label">
+                <span class="settings-name">开机自启动</span>
+                <span class="settings-hint">随 Windows 系统开机自动在后台启动工具箱</span>
+              </div>
+              <div class="form-check form-switch m-0">
+                <input class="form-check-input custom-switch" type="checkbox" role="switch" id="switchAutoStart">
+              </div>
+            </div>
+          </div>
+
+          <!-- Appearance Settings -->
+          <div class="settings-card">
+            <div class="settings-card-title">
+              <i data-lucide="palette"></i>
+              <span>外观与主题</span>
+            </div>
+            <div class="settings-card-desc">选择应用主题配色与视觉风格</div>
+
+            <div class="theme-options-grid">
+              <div class="theme-card-option" data-theme-val="light" id="themeOptLight">
+                <div class="theme-preview-box theme-preview-light">
+                  <div class="preview-side"></div>
+                  <div class="preview-main"></div>
+                </div>
+                <span class="theme-option-title">
+                  <i data-lucide="sun" class="lucide-sm me-1"></i> 浅色模式
+                </span>
+              </div>
+
+              <div class="theme-card-option" data-theme-val="dark" id="themeOptDark">
+                <div class="theme-preview-box theme-preview-dark">
+                  <div class="preview-side"></div>
+                  <div class="preview-main"></div>
+                </div>
+                <span class="theme-option-title">
+                  <i data-lucide="moon" class="lucide-sm me-1"></i> 深色模式
+                </span>
+              </div>
+
+              <div class="theme-card-option active" data-theme-val="system" id="themeOptSystem">
+                <div class="theme-preview-box theme-preview-auto"></div>
+                <span class="theme-option-title">
+                  <i data-lucide="monitor" class="lucide-sm me-1"></i> 跟随系统
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Administrator Privilege Management -->
+          <div class="settings-card">
+            <div class="settings-card-header-row">
+              <div class="settings-card-title-group">
+                <div class="settings-card-title">
+                  <i data-lucide="shield-alert"></i>
+                  <span>Windows 运行权限管理</span>
+                </div>
+                <div class="settings-card-desc">
+                  当前状态：<span class="fw-bold" id="settingsPrivilegeStatus">检测中...</span>。应用已内置<strong>智能 UAC 按需提权</strong>：修改 Hosts、写入系统级环境变量或终止受保护进程时，若权限不足将自动呼出 Windows 授权弹窗。
+                </div>
+              </div>
+              <button class="btn btn-outline-primary btn-sm d-flex align-items-center gap-1" id="btnRestartAsAdmin">
+                <i data-lucide="shield" style="width: 14px; height: 14px;"></i>
+                <span>以管理员身份重启应用</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- System & Environment Info -->
+          <div class="settings-card">
+            <div class="settings-card-title">
+              <i data-lucide="info"></i>
+              <span>系统与运行环境</span>
+            </div>
+            <div class="settings-card-desc">当前运行架构及核心组件信息</div>
+
+            <div class="info-grid">
+              <div class="info-item">
+                <span class="info-item-label">操作系统</span>
+                <span class="info-item-val" id="infoOS">Windows 11 / 10</span>
+              </div>
+              <div class="info-item">
+                <span class="info-item-label">运行权限</span>
+                <span class="info-item-val fw-bold" id="infoPrivilege">普通用户</span>
+              </div>
+              <div class="info-item">
+                <span class="info-item-label">PowerShell 内核</span>
+                <span class="info-item-val" id="infoPS">5.1 / 7.x</span>
+              </div>
+              <div class="info-item">
+                <span class="info-item-label">WebView2 引擎</span>
+                <span class="info-item-val" id="infoWV">Chromium Runtime</span>
+              </div>
+              <div class="info-item">
+                <span class="info-item-label">模板应用版本</span>
+                <span class="info-item-val" id="infoVersion">v1.0.0</span>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <!-- Environment Variable Edit Modal -->
+  <div class="modal-overlay d-none" id="envVarModal">
+    <div class="modal-dialog-box">
+      <div class="modal-header-box">
+        <h5 class="modal-title-box" id="envModalTitle">编辑环境变量</h5>
+        <button type="button" class="btn-close" id="btnCloseEnvModal"></button>
+      </div>
+      <div class="modal-body-box">
+        <div>
+          <label class="form-label fw-bold small text-secondary">变量作用域</label>
+          <select class="form-select form-select-sm" id="envModalScope">
+            <option value="User">用户变量 (User)</option>
+            <option value="Machine">系统变量 (Machine / System)</option>
+          </select>
+        </div>
+        <div>
+          <label class="form-label fw-bold small text-secondary">变量名称 (Name)</label>
+          <input type="text" class="form-control form-control-sm font-mono" id="envModalName" placeholder="例如: JAVA_HOME">
+        </div>
+        <div>
+          <label class="form-label fw-bold small text-secondary">变量值 (Value)</label>
+          <textarea class="form-control form-control-sm font-mono" id="envModalValue" rows="4" placeholder="例如: C:\Program Files\Java\jdk-17"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer-box">
+        <button type="button" class="btn btn-secondary btn-sm" id="btnCancelEnvModal">取消</button>
+        <button type="button" class="btn btn-primary btn-sm" id="btnSaveEnvModal">保存变量</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Quick Add Host Modal -->
+  <div class="modal-overlay d-none" id="addHostModal">
+    <div class="modal-dialog-box">
+      <div class="modal-header-box">
+        <h5 class="modal-title-box">添加 Hosts 映射规则</h5>
+        <button type="button" class="btn-close" id="btnCloseHostModal"></button>
+      </div>
+      <div class="modal-body-box">
+        <div>
+          <label class="form-label fw-bold small text-secondary">IP 地址 (IP Address)</label>
+          <input type="text" class="form-control form-control-sm font-mono" id="hostModalIp" placeholder="例如: 127.0.0.1" value="127.0.0.1">
+        </div>
+        <div>
+          <label class="form-label fw-bold small text-secondary">域名 / 主机名 (Domain / Hostname)</label>
+          <input type="text" class="form-control form-control-sm font-mono" id="hostModalDomain" placeholder="例如: dev.local 或 test.mysite.com">
+        </div>
+        <div>
+          <label class="form-label fw-bold small text-secondary">备注说明 (可选)</label>
+          <input type="text" class="form-control form-control-sm" id="hostModalComment" placeholder="例如: 本地开发测试节点">
+        </div>
+      </div>
+      <div class="modal-footer-box">
+        <button type="button" class="btn btn-secondary btn-sm" id="btnCancelHostModal">取消</button>
+        <button type="button" class="btn btn-primary btn-sm" id="btnSaveHostModal">确认添加</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Message Container -->
+  <div class="app-toast-container" id="toastContainer"></div>
+
+  <!-- Scripts -->
   <script src="./vendor/bootstrap/bootstrap.bundle.min.js"></script>
   <script src="./vendor/lucide/lucide.min.js"></script>
   <script src="./js/app.js"></script>
-  <script>
-    lucide.createIcons();
-  </script>
 </body>
 </html>
+
