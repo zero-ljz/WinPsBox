@@ -214,6 +214,34 @@ function Register-AppWebViewHandlers($webView) {
                     "net_flush_dns_winsock" {
                         $response.data = Invoke-FlushDnsAndWinsock
                     }
+
+                    # PortProxy (v4tov4) Manager
+                    "net_get_portproxy_rules" {
+                        $res = Get-PortProxyV4ToV4Rules
+                        if ($res.success) { $response.data = $res } else { $response.success = $false; $response.error = $res.error }
+                    }
+                    "net_get_portproxy_targets" {
+                        $res = Get-PortProxyTargetCandidates
+                        if ($res.success) { $response.data = $res } else { $response.success = $false; $response.error = $res.error }
+                    }
+                    "net_add_portproxy_rule" {
+                        $res = Add-PortProxyV4ToV4Rule `
+                            -listenAddress ([string]$payload.listenAddress) `
+                            -listenPort ([int]$payload.listenPort) `
+                            -connectAddress ([string]$payload.connectAddress) `
+                            -connectPort ([int]$payload.connectPort)
+                        if ($res.success) { $response.data = $res } else { $response.success = $false; $response.error = $res.error }
+                    }
+                    "net_remove_portproxy_rule" {
+                        $res = Remove-PortProxyV4ToV4Rule `
+                            -listenAddress ([string]$payload.listenAddress) `
+                            -listenPort ([int]$payload.listenPort)
+                        if ($res.success) { $response.data = $res } else { $response.success = $false; $response.error = $res.error }
+                    }
+                    "net_start_portproxy_service" {
+                        $res = Start-PortProxyIpHelperService
+                        if ($res.success) { $response.data = $res } else { $response.success = $false; $response.error = $res.error }
+                    }
     
                     # 2. LAN Scanner
                     "net_scan_lan" {

@@ -1,0 +1,436 @@
+.portproxy-view {
+  min-height: 480px;
+}
+
+.portproxy-status-band {
+  min-height: 72px;
+  padding: 12px 16px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.portproxy-status-main,
+.portproxy-status-actions,
+.portproxy-pane-heading,
+.portproxy-field-row,
+.portproxy-command-label,
+.portproxy-note,
+.portproxy-endpoint {
+  display: flex;
+  align-items: center;
+}
+
+.portproxy-status-main {
+  gap: 12px;
+  min-width: 0;
+}
+
+.portproxy-status-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-md);
+  background: rgba(16, 185, 129, 0.14);
+  color: #10b981;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+}
+
+.portproxy-status-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.portproxy-status-title {
+  color: var(--text-main);
+  font-size: 0.94rem;
+  font-weight: 700;
+}
+
+.portproxy-status-meta {
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
+.portproxy-status-meta.is-warning {
+  color: #f59e0b;
+}
+
+.portproxy-status-actions {
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.icon-command-btn {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+}
+
+.icon-command-btn svg {
+  width: 15px;
+  height: 15px;
+}
+
+.portproxy-layout {
+  min-height: 390px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+  display: grid;
+  grid-template-columns: minmax(310px, 0.82fr) minmax(430px, 1.45fr);
+  overflow: hidden;
+}
+
+.portproxy-form-pane,
+.portproxy-rules-pane {
+  min-width: 0;
+  padding: 20px;
+}
+
+.portproxy-form-pane {
+  border-right: 1px solid var(--border-color);
+  background: var(--bg-app);
+}
+
+.portproxy-pane-heading {
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.portproxy-pane-heading h4 {
+  margin: 0;
+  color: var(--text-main);
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.portproxy-pane-heading span {
+  display: block;
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-size: 0.74rem;
+}
+
+.portproxy-pane-heading > svg {
+  width: 19px;
+  height: 19px;
+  color: var(--accent-primary);
+}
+
+.portproxy-endpoint-fieldset {
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+}
+
+.portproxy-endpoint-fieldset.destination {
+  border-color: rgba(16, 185, 129, 0.4);
+}
+
+.portproxy-endpoint-fieldset legend {
+  float: none;
+  width: auto;
+  margin: 0 0 8px;
+  padding: 0 4px;
+  color: var(--text-secondary);
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.portproxy-field-row {
+  gap: 10px;
+}
+
+.portproxy-field {
+  min-width: 0;
+}
+
+.portproxy-field-address {
+  flex: 1 1 auto;
+}
+
+.portproxy-field-port {
+  width: 94px;
+  flex: 0 0 94px;
+}
+
+.portproxy-field label {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.portproxy-address-picker {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+}
+
+.portproxy-address-picker .form-control {
+  min-width: 0;
+}
+
+.portproxy-address-picker .icon-command-btn {
+  height: 31px;
+}
+
+.portproxy-discovery-status {
+  min-height: 16px;
+  margin-top: 5px;
+  color: #10b981;
+  font-size: 0.68rem;
+  line-height: 1.35;
+}
+
+.portproxy-discovery-status.is-error {
+  color: #ef4444;
+}
+
+.portproxy-direction {
+  height: 30px;
+  display: grid;
+  grid-template-columns: 1fr 22px 1fr;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-muted);
+}
+
+.portproxy-direction span {
+  height: 1px;
+  background: var(--border-color);
+}
+
+.portproxy-direction svg {
+  width: 16px;
+  height: 16px;
+}
+
+.portproxy-command-preview {
+  margin-top: 14px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: #10151d;
+  color: #d6e1ee;
+  overflow: hidden;
+}
+
+.portproxy-command-label {
+  min-height: 32px;
+  padding: 5px 8px 5px 12px;
+  justify-content: space-between;
+  border-bottom: 1px solid #283241;
+  color: #8fa0b5;
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+
+.portproxy-command-preview code {
+  display: block;
+  min-height: 60px;
+  padding: 10px 12px;
+  color: #8de1bb;
+  font-size: 0.74rem;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.portproxy-copy-btn {
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: #9fb0c4;
+  display: grid;
+  place-items: center;
+}
+
+.portproxy-copy-btn:hover {
+  background: #263140;
+  color: #ffffff;
+}
+
+.portproxy-copy-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+.portproxy-note {
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 12px;
+  color: var(--text-muted);
+  font-size: 0.74rem;
+  line-height: 1.45;
+}
+
+.portproxy-note svg {
+  width: 15px;
+  height: 15px;
+  margin-top: 1px;
+  color: #f59e0b;
+  flex: 0 0 auto;
+}
+
+.portproxy-submit {
+  width: 100%;
+  min-height: 36px;
+  margin-top: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+}
+
+.portproxy-rules-pane {
+  display: flex;
+  flex-direction: column;
+}
+
+.portproxy-rules-mount {
+  min-height: 260px;
+  flex: 1;
+  overflow: auto;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+}
+
+.portproxy-table-wrap {
+  min-width: 470px;
+}
+
+.portproxy-table th,
+.portproxy-table td {
+  padding: 12px 14px;
+}
+
+.portproxy-arrow-column {
+  width: 44px;
+  padding-left: 4px !important;
+  padding-right: 4px !important;
+  text-align: center !important;
+  color: var(--text-muted);
+}
+
+.portproxy-arrow-column svg {
+  width: 16px;
+  height: 16px;
+}
+
+.portproxy-action-column {
+  width: 62px;
+  text-align: right !important;
+}
+
+.portproxy-endpoint {
+  min-width: 0;
+  gap: 1px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  white-space: nowrap;
+}
+
+.portproxy-endpoint strong {
+  color: var(--text-main);
+  font-size: 0.82rem;
+  font-weight: 650;
+}
+
+.portproxy-endpoint span {
+  color: var(--accent-primary);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.portproxy-endpoint.destination span {
+  color: #10b981;
+}
+
+.portproxy-loading,
+.portproxy-empty {
+  min-height: 260px;
+  padding: 28px;
+  color: var(--text-muted);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  text-align: center;
+  font-size: 0.8rem;
+}
+
+.portproxy-loading {
+  flex-direction: row;
+}
+
+.portproxy-empty svg {
+  width: 34px;
+  height: 34px;
+  margin-bottom: 3px;
+  opacity: 0.55;
+}
+
+.portproxy-empty strong {
+  color: var(--text-main);
+  font-size: 0.9rem;
+}
+
+.portproxy-empty.is-error,
+.portproxy-empty.is-error strong {
+  color: #ef4444;
+}
+
+@media (max-width: 900px) {
+  .portproxy-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .portproxy-form-pane {
+    border-right: 0;
+    border-bottom: 1px solid var(--border-color);
+  }
+}
+
+@media (max-width: 620px) {
+  .portproxy-status-band {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .portproxy-status-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .portproxy-form-pane,
+  .portproxy-rules-pane {
+    padding: 14px;
+  }
+
+  .portproxy-field-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .portproxy-field-port {
+    width: 100%;
+    flex-basis: auto;
+  }
+}

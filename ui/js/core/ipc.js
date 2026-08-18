@@ -9,6 +9,9 @@
 const IPC = {
   callbacks: new Map(),
   mockTcpSessions: new Map(),
+  mockPortProxyRules: [
+    { listenAddress: '0.0.0.0', listenPort: 13389, connectAddress: '172.31.220.80', connectPort: 3389 }
+  ],
   reqCounter: 0,
   isWebView: Boolean(window.chrome && window.chrome.webview),
 
@@ -52,7 +55,7 @@ const IPC = {
       // Timeout safeguard
       const timeoutMs = action === 'winget_package_action'
         ? 15 * 60 * 1000
-        : (action.startsWith('winget_') || action.startsWith('cert_') || action === 'net_http_request' || action === 'net_ping' || action === 'net_check_remote_port' || action === 'net_trace_route' || action === 'net_scan_lan' || action === 'net_dns_deep_diagnostic' || action === 'net_intel_lookup')
+        : (action.startsWith('winget_') || action.startsWith('cert_') || action === 'net_http_request' || action === 'net_ping' || action === 'net_check_remote_port' || action === 'net_trace_route' || action === 'net_scan_lan' || action === 'net_dns_deep_diagnostic' || action === 'net_intel_lookup' || action === 'net_get_portproxy_targets')
           ? 60000
           : 15000;
       setTimeout(() => {
@@ -399,6 +402,56 @@ const IPC = {
           break;
         case 'net_flush_dns_winsock':
           resolve({ success: true, message: 'DNS 解析缓存已刷新 (Mock)' });
+          break;
+        case 'net_get_portproxy_rules':
+          resolve({
+            success: true,
+            rules: this.mockPortProxyRules.map(rule => ({ ...rule })),
+            isAdmin: localStorage.getItem('mock_admin') === 'true',
+            serviceRunning: true,
+            serviceStatus: 'Running'
+          });
+          break;
+        case 'net_get_portproxy_targets': {
+          const currentTargets = this.mockPortProxyRules.map(rule => ({
+            address: rule.connectAddress,
+            source: 'PortProxy',
+            name: '现有规则目标'
+          }));
+          const discoveredTargets = [
+            { address: '172.31.220.80', source: 'WSL', name: 'Ubuntu-24.04' },
+            { address: '192.168.1.108', source: '本机网卡', name: '以太网' },
+            { address: '192.168.1.120', source: '邻居设备', name: '以太网' }
+          ];
+          const uniqueTargets = [...discoveredTargets, ...currentTargets].filter((item, index, list) =>
+            list.findIndex(candidate => candidate.address === item.address) === index
+          );
+          resolve({ success: true, candidates: uniqueTargets });
+          break;
+        }
+        case 'net_add_portproxy_rule': {
+          const rule = {
+            listenAddress: payload.listenAddress,
+            listenPort: Number(payload.listenPort),
+            connectAddress: payload.connectAddress,
+            connectPort: Number(payload.connectPort)
+          };
+          const existingIndex = this.mockPortProxyRules.findIndex(item =>
+            item.listenAddress === rule.listenAddress && item.listenPort === rule.listenPort
+          );
+          if (existingIndex >= 0) this.mockPortProxyRules.splice(existingIndex, 1);
+          this.mockPortProxyRules.push(rule);
+          resolve({ success: true, message: `端口代理规则已添加：${rule.listenAddress}:${rule.listenPort} -> ${rule.connectAddress}:${rule.connectPort}` });
+          break;
+        }
+        case 'net_remove_portproxy_rule':
+          this.mockPortProxyRules = this.mockPortProxyRules.filter(item =>
+            !(item.listenAddress === payload.listenAddress && item.listenPort === Number(payload.listenPort))
+          );
+          resolve({ success: true, message: `端口代理规则已删除：${payload.listenAddress}:${payload.listenPort}` });
+          break;
+        case 'net_start_portproxy_service':
+          resolve({ success: true, message: 'IP Helper 服务已启动 (Mock)' });
           break;
         case 'net_scan_lan':
           resolve({

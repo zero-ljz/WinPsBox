@@ -30,6 +30,7 @@ const ToolRegistry = {
   tools: [
     // Network tools (Fully implemented)
     { id: 'net-adapter-dns', title: '网卡与 DNS 切换器', category: 'network', categoryName: '网络工具', icon: 'network', desc: '查看网卡配置、一键切换 DHCP/静态 IP 与公共 DNS 方案，一键刷新 DNS 缓存', tags: ['网络', 'DNS', 'IP', '网卡'] },
+    { id: 'portproxy-manager', title: 'Windows 端口代理管理器', category: 'network', categoryName: '网络工具', icon: 'waypoints', desc: '可视化管理 netsh interface portproxy v4tov4 转发规则，支持按需 UAC 提权', tags: ['网络', '端口', '转发', 'PortProxy'] },
     { id: 'lan-scanner', title: '局域网设备扫描发现', category: 'network', categoryName: '网络工具', icon: 'radar', desc: '扫描局域网在线设备 IP、MAC 地址、主机名并自动匹配网卡硬件厂商 OUI', tags: ['探测', '局域网', 'ARP', '扫描'] },
     { id: 'ssl-checker', title: 'SSL / TLS 证书检测', category: 'network', categoryName: '网络工具', icon: 'shield-check', desc: '检测远程 HTTPS 域名 SSL 证书链、到期时间、SAN 域名列表与 TLS 协议套件', tags: ['安全', 'SSL', '证书', '网络'] },
     { id: 'proxy-manager', title: '系统与终端代理管理', category: 'network', categoryName: '网络工具', icon: 'arrow-left-right', desc: '快速切换 Windows 系统全局/PAC 代理，并一键生成终端 HTTP/Socks5 代理环境变量', tags: ['网络', '代理', 'Proxy', '终端'] },
@@ -216,6 +217,9 @@ const ToolRegistry = {
         // Network Tools
         case 'net-adapter-dns':
           NetAdapterTool.render(mount);
+          break;
+        case 'portproxy-manager':
+          PortProxyManagerTool.render(mount);
           break;
         case 'lan-scanner':
           LanScannerTool.render(mount);

@@ -449,6 +449,235 @@ function Invoke-FlushDnsAndWinsock {
     }
 }
 
+# ----------------- PortProxy (v4tov4) Manager -----------------
+function Test-PortProxyIPv4Address([string]$address) {
+    if ([string]::IsNullOrWhiteSpace($address)) { return $false }
+
+    $parsedAddress = $null
+    if (-not [System.Net.IPAddress]::TryParse($address, [ref]$parsedAddress)) { return $false }
+    return $parsedAddress.AddressFamily -eq [System.Net.Sockets.AddressFamily]::InterNetwork
+}
+
+function Get-PortProxyV4ToV4Rules {
+    try {
+        $netshPath = Join-Path $env:SystemRoot "System32\netsh.exe"
+        $output = @(& $netshPath interface portproxy show v4tov4 2>&1)
+        $exitCode = $LASTEXITCODE
+
+        if ($exitCode -ne 0) {
+            return @{
+                success = $false
+                error = (($output | ForEach-Object { [string]$_ }) -join "`r`n").Trim()
+            }
+        }
+
+        $rules = [System.Collections.Generic.List[PSCustomObject]]::new()
+        foreach ($line in $output) {
+            $text = ([string]$line).Trim()
+            if ($text -match '^([0-9]{1,3}(?:\.[0-9]{1,3}){3})\s+(\d{1,5})\s+([0-9]{1,3}(?:\.[0-9]{1,3}){3})\s+(\d{1,5})$') {
+                $rules.Add([PSCustomObject]@{
+                    listenAddress = $matches[1]
+                    listenPort = [int]$matches[2]
+                    connectAddress = $matches[3]
+                    connectPort = [int]$matches[4]
+                })
+            }
+        }
+
+        $service = Get-Service -Name "iphlpsvc" -ErrorAction SilentlyContinue
+        return @{
+            success = $true
+            rules = $rules.ToArray()
+            isAdmin = (Test-IsAdmin)
+            serviceRunning = ($null -ne $service -and $service.Status -eq [System.ServiceProcess.ServiceControllerStatus]::Running)
+            serviceStatus = if ($service) { [string]$service.Status } else { "NotFound" }
+        }
+    }
+    catch {
+        return @{ success = $false; error = $_.Exception.Message }
+    }
+}
+
+function Get-PortProxyTargetCandidates {
+    try {
+        $candidates = [System.Collections.Generic.List[PSCustomObject]]::new()
+        $seenAddresses = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+        $addCandidate = {
+            param([string]$address, [string]$source, [string]$name)
+
+            $address = $address.Trim()
+            if ((Test-PortProxyIPv4Address $address) -and $seenAddresses.Add($address)) {
+                $candidates.Add([PSCustomObject]@{
+                    address = $address
+                    source = $source
+                    name = $name
+                })
+            }
+        }
+
+        # Prefer addresses from running WSL instances. Querying this list does not start stopped distributions.
+        $wslPath = Join-Path $env:SystemRoot "System32\wsl.exe"
+        if (Test-Path $wslPath) {
+            $runningDistros = @(& $wslPath --list --running --quiet 2>$null)
+            foreach ($rawDistro in ($runningDistros | Select-Object -First 8)) {
+                $distro = ([string]$rawDistro).Replace("`0", "").Trim()
+                if (-not $distro) { continue }
+
+                $wslOutput = @(& $wslPath --distribution $distro --exec hostname -I 2>$null)
+                $wslAddresses = (($wslOutput | ForEach-Object { ([string]$_).Replace("`0", "") }) -join " ") -split '\s+'
+                foreach ($address in $wslAddresses) {
+                    if ($address) { & $addCandidate $address "WSL" $distro }
+                }
+            }
+        }
+
+        $currentRules = Get-PortProxyV4ToV4Rules
+        if ($currentRules.success) {
+            foreach ($rule in @($currentRules.rules)) {
+                & $addCandidate ([string]$rule.connectAddress) "PortProxy" "现有规则目标"
+            }
+        }
+
+        $localAddresses = @(Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue | Where-Object {
+            $_.IPAddress -ne "127.0.0.1" -and
+            $_.IPAddress -notlike "169.254.*" -and
+            $_.IPAddress -ne "0.0.0.0"
+        } | Sort-Object InterfaceMetric, InterfaceAlias)
+        foreach ($item in $localAddresses) {
+            & $addCandidate ([string]$item.IPAddress) "本机网卡" ([string]$item.InterfaceAlias)
+        }
+
+        $neighbors = @(Get-NetNeighbor -AddressFamily IPv4 -ErrorAction SilentlyContinue | Where-Object {
+            $_.State -notin @("Unreachable", "Incomplete") -and
+            $_.IPAddress -notlike "169.254.*" -and
+            $_.IPAddress -ne "0.0.0.0" -and
+            $_.IPAddress -ne "255.255.255.255" -and
+            [int]($_.IPAddress.Split('.')[0]) -lt 224
+        } | Sort-Object InterfaceAlias, IPAddress | Select-Object -First 40)
+        foreach ($item in $neighbors) {
+            & $addCandidate ([string]$item.IPAddress) "邻居设备" ([string]$item.InterfaceAlias)
+        }
+
+        return @{
+            success = $true
+            candidates = $candidates.ToArray()
+        }
+    }
+    catch {
+        return @{ success = $false; error = $_.Exception.Message }
+    }
+}
+
+function Add-PortProxyV4ToV4Rule(
+    [string]$listenAddress,
+    [int]$listenPort,
+    [string]$connectAddress,
+    [int]$connectPort
+) {
+    if (-not (Test-PortProxyIPv4Address $listenAddress)) {
+        return @{ success = $false; error = "监听地址必须是有效的 IPv4 地址。" }
+    }
+    if (-not (Test-PortProxyIPv4Address $connectAddress)) {
+        return @{ success = $false; error = "目标地址必须是有效的 IPv4 地址。" }
+    }
+    if ($listenPort -lt 1 -or $listenPort -gt 65535 -or $connectPort -lt 1 -or $connectPort -gt 65535) {
+        return @{ success = $false; error = "端口必须介于 1 和 65535 之间。" }
+    }
+
+    $currentRules = Get-PortProxyV4ToV4Rules
+    $operation = "add"
+    if ($currentRules.success -and @($currentRules.rules | Where-Object {
+        $_.listenAddress -eq $listenAddress -and [int]$_.listenPort -eq $listenPort
+    }).Count -gt 0) {
+        $operation = "set"
+    }
+
+    $netshPath = Join-Path $env:SystemRoot "System32\netsh.exe"
+    $arguments = @(
+        "interface", "portproxy", $operation, "v4tov4",
+        "listenport=$listenPort", "listenaddress=$listenAddress",
+        "connectport=$connectPort", "connectaddress=$connectAddress"
+    )
+
+    try {
+        if (Test-IsAdmin) {
+            $output = @(& $netshPath @arguments 2>&1)
+            if ($LASTEXITCODE -ne 0) {
+                throw (($output | ForEach-Object { [string]$_ }) -join "`r`n").Trim()
+            }
+        }
+        else {
+            # All interpolated values have passed strict IPv4/integer validation above.
+            $command = "& `"$netshPath`" interface portproxy $operation v4tov4 listenport=$listenPort listenaddress=$listenAddress connectport=$connectPort connectaddress=$connectAddress; exit `$LASTEXITCODE"
+            $elevated = Invoke-ElevatedCommand -scriptBlockText $command
+            if (-not $elevated.success) { return @{ success = $false; error = $elevated.error } }
+        }
+
+        return @{
+            success = $true
+            message = "端口代理规则已添加：${listenAddress}:${listenPort} -> ${connectAddress}:${connectPort}"
+        }
+    }
+    catch {
+        return @{ success = $false; error = $_.Exception.Message }
+    }
+}
+
+function Remove-PortProxyV4ToV4Rule([string]$listenAddress, [int]$listenPort) {
+    if (-not (Test-PortProxyIPv4Address $listenAddress)) {
+        return @{ success = $false; error = "监听地址必须是有效的 IPv4 地址。" }
+    }
+    if ($listenPort -lt 1 -or $listenPort -gt 65535) {
+        return @{ success = $false; error = "端口必须介于 1 和 65535 之间。" }
+    }
+
+    $netshPath = Join-Path $env:SystemRoot "System32\netsh.exe"
+    $arguments = @(
+        "interface", "portproxy", "delete", "v4tov4",
+        "listenport=$listenPort", "listenaddress=$listenAddress"
+    )
+
+    try {
+        if (Test-IsAdmin) {
+            $output = @(& $netshPath @arguments 2>&1)
+            if ($LASTEXITCODE -ne 0) {
+                throw (($output | ForEach-Object { [string]$_ }) -join "`r`n").Trim()
+            }
+        }
+        else {
+            $command = "& `"$netshPath`" interface portproxy delete v4tov4 listenport=$listenPort listenaddress=$listenAddress; exit `$LASTEXITCODE"
+            $elevated = Invoke-ElevatedCommand -scriptBlockText $command
+            if (-not $elevated.success) { return @{ success = $false; error = $elevated.error } }
+        }
+
+        return @{
+            success = $true
+            message = "端口代理规则已删除：${listenAddress}:${listenPort}"
+        }
+    }
+    catch {
+        return @{ success = $false; error = $_.Exception.Message }
+    }
+}
+
+function Start-PortProxyIpHelperService {
+    try {
+        if (Test-IsAdmin) {
+            Start-Service -Name "iphlpsvc" -ErrorAction Stop
+        }
+        else {
+            $command = "`$ErrorActionPreference = 'Stop'; Start-Service -Name 'iphlpsvc' -ErrorAction Stop"
+            $elevated = Invoke-ElevatedCommand -scriptBlockText $command
+            if (-not $elevated.success) { return @{ success = $false; error = $elevated.error } }
+        }
+
+        return @{ success = $true; message = "IP Helper 服务已启动。" }
+    }
+    catch {
+        return @{ success = $false; error = $_.Exception.Message }
+    }
+}
+
 # ----------------- 2. LAN Scanner Functions -----------------
 function Invoke-LanScanner([string]$subnetBase = "") {
     try {
