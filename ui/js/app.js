@@ -49,7 +49,11 @@ const IPC = {
       window.chrome.webview.postMessage({ id, action, payload });
 
       // Timeout safeguard
-      const timeoutMs = (action === 'net_http_request' || action === 'net_ping' || action === 'net_check_remote_port' || action === 'net_trace_route' || action === 'net_scan_lan') ? 45000 : 15000;
+      const timeoutMs = action === 'winget_package_action'
+        ? 15 * 60 * 1000
+        : (action.startsWith('winget_') || action === 'net_http_request' || action === 'net_ping' || action === 'net_check_remote_port' || action === 'net_trace_route' || action === 'net_scan_lan')
+          ? 60000
+          : 15000;
       setTimeout(() => {
         if (this.callbacks.has(id)) {
           this.callbacks.delete(id);
@@ -421,6 +425,37 @@ const IPC = {
         case 'sys_launch_shortcut':
           resolve({ success: true, message: `已成功调起系统工具: ${payload.toolKey} (Mock)` });
           break;
+        case 'winget_get_status':
+          resolve({ available: true, version: 'v1.29.280', error: null });
+          break;
+        case 'winget_get_packages': {
+          const installed = [
+            { name: '7-Zip', id: '7zip.7zip', version: '23.01', availableVersion: '26.02', source: 'winget' },
+            { name: 'Git', id: 'Git.Git', version: '2.45.0', availableVersion: '2.55.0.3', source: 'winget' },
+            { name: 'Microsoft PowerShell', id: 'Microsoft.PowerShell', version: '7.5.2.0', availableVersion: '', source: 'winget' },
+            { name: 'Visual Studio Code', id: 'Microsoft.VisualStudioCode', version: '1.103.1', availableVersion: '', source: 'winget' },
+            { name: 'Windows Terminal', id: 'Microsoft.WindowsTerminal', version: '1.22.11141.0', availableVersion: '', source: 'winget' }
+          ];
+          const items = payload.mode === 'updates' ? installed.filter(item => item.availableVersion) : installed;
+          resolve({ success: true, items, count: items.length, mode: payload.mode || 'installed' });
+          break;
+        }
+        case 'winget_search':
+          resolve({
+            success: true,
+            query: payload.query,
+            count: 4,
+            items: [
+              { name: 'PowerShell', id: 'Microsoft.PowerShell', version: '7.6.5.0', source: 'winget', match: '' },
+              { name: 'WinPaletter', id: 'Abdelrhman-AK.WinPaletter', version: '1.0.9.9', source: 'winget', match: 'Tag: powershell' },
+              { name: 'Atuin', id: 'Atuinsh.Atuin', version: '18.19.0', source: 'winget', match: 'Tag: powershell' },
+              { name: 'Chocolatey', id: 'Chocolatey.Chocolatey', version: '2.7.3.0', source: 'winget', match: 'Tag: powershell' }
+            ]
+          });
+          break;
+        case 'winget_package_action':
+          resolve({ success: true, operation: payload.operation, packageId: payload.packageId || '', message: '操作已完成 (Mock)' });
+          break;
 
         default:
           resolve({ success: true });
@@ -455,8 +490,9 @@ const Toast = {
 
     toast.innerHTML = `
       <i data-lucide="${iconName}" style="color: ${iconColor}; width: 18px; height: 18px;"></i>
-      <span>${message}</span>
+      <span></span>
     `;
+    toast.querySelector('span').textContent = String(message);
 
     container.appendChild(toast);
     if (window.lucide) lucide.createIcons({ root: toast });
@@ -4111,6 +4147,351 @@ const SystemLauncherTool = {
   }
 };
 
+// ==========================================
+// 12. WingetManagerTool - Windows package management
+// ==========================================
+const WingetManagerTool = {
+  activeTab: 'installed',
+  installed: [],
+  updates: [],
+  searchResults: [],
+  status: null,
+  busy: false,
+
+  escape(value) {
+    return String(value ?? '').replace(/[&<>"']/g, char => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    })[char]);
+  },
+
+  render(container) {
+    this.activeTab = 'installed';
+    this.installed = [];
+    this.updates = [];
+    this.searchResults = [];
+    this.status = null;
+
+    container.innerHTML = `
+      <div class="tool-view-wrapper winget-panel">
+        <div class="winget-status-strip">
+          <div class="winget-status-item">
+            <span class="winget-status-icon"><i data-lucide="package-check"></i></span>
+            <div><span class="winget-status-label">WinGet 状态</span><strong id="wingetVersion">检测中</strong></div>
+          </div>
+          <div class="winget-status-item">
+            <span class="winget-status-icon neutral"><i data-lucide="package"></i></span>
+            <div><span class="winget-status-label">已安装</span><strong id="wingetInstalledCount">--</strong></div>
+          </div>
+          <div class="winget-status-item">
+            <span class="winget-status-icon warning"><i data-lucide="arrow-up-circle"></i></span>
+            <div><span class="winget-status-label">可更新</span><strong id="wingetUpdateCount">--</strong></div>
+          </div>
+          <div class="winget-status-actions">
+            <button class="btn btn-primary btn-sm" id="btnWingetUpgradeAll" disabled>
+              <i data-lucide="download" class="lucide-sm me-1"></i> 全部升级
+            </button>
+            <button class="btn btn-outline-secondary btn-sm icon-action-btn" id="btnWingetRefresh" title="刷新列表" aria-label="刷新列表">
+              <i data-lucide="refresh-cw" class="lucide-sm"></i>
+            </button>
+          </div>
+        </div>
+
+        <div class="tool-toolbar winget-toolbar">
+          <div class="tool-toolbar-left">
+            <div class="tool-nav-tabs">
+              <button class="tool-tab-btn active" data-winget-tab="installed"><i data-lucide="hard-drive-download"></i> 已安装</button>
+              <button class="tool-tab-btn" data-winget-tab="updates"><i data-lucide="circle-arrow-up"></i> 可更新 <span class="winget-tab-count" id="wingetUpdateTabCount">0</span></button>
+              <button class="tool-tab-btn" data-winget-tab="search"><i data-lucide="search"></i> 软件搜索</button>
+            </div>
+          </div>
+          <div class="tool-toolbar-right winget-search-group">
+            <div class="input-group input-group-sm">
+              <span class="input-group-text"><i data-lucide="search" style="width:14px;height:14px;"></i></span>
+              <input type="text" class="form-control" id="wingetSearchInput" placeholder="筛选已安装软件..." autocomplete="off">
+              <button class="btn btn-primary d-none" id="btnWingetSearch">搜索</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="winget-operation-bar d-none" id="wingetOperationBar">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+          <span id="wingetOperationText">正在执行...</span>
+        </div>
+
+        <div class="table-card winget-table-card">
+          <div class="table-responsive-container">
+            <table class="modern-table winget-table">
+              <thead id="wingetTableHead"></thead>
+              <tbody id="wingetTableBody">
+                <tr><td class="text-center text-muted py-5"><span class="spinner-border spinner-border-sm text-primary me-2"></span>正在读取软件包...</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="winget-table-footer">
+            <span id="wingetResultCount">0 项</span>
+            <span id="wingetLastRefresh">--</span>
+          </div>
+        </div>
+      </div>
+    `;
+
+    this.bindEvents(container);
+    this.renderTable();
+    this.showTableLoading('正在读取软件包...');
+    this.loadInitial();
+  },
+
+  bindEvents(container) {
+    container.querySelectorAll('[data-winget-tab]').forEach(button => {
+      button.onclick = () => this.switchTab(button.dataset.wingetTab);
+    });
+
+    const input = container.querySelector('#wingetSearchInput');
+    const searchButton = container.querySelector('#btnWingetSearch');
+    const refreshButton = container.querySelector('#btnWingetRefresh');
+    const upgradeAllButton = container.querySelector('#btnWingetUpgradeAll');
+    const tableBody = container.querySelector('#wingetTableBody');
+
+    if (input) {
+      input.oninput = () => {
+        if (this.activeTab !== 'search') this.renderTable();
+      };
+      input.onkeydown = event => {
+        if (event.key === 'Enter' && this.activeTab === 'search') this.searchPackages();
+      };
+    }
+    if (searchButton) searchButton.onclick = () => this.searchPackages();
+    if (refreshButton) refreshButton.onclick = () => this.refreshCurrent();
+    if (upgradeAllButton) upgradeAllButton.onclick = () => this.runPackageAction('upgrade-all', '', '全部可更新软件');
+    if (tableBody) {
+      tableBody.onclick = event => {
+        const button = event.target.closest('[data-winget-action]');
+        if (!button || this.busy) return;
+        this.runPackageAction(button.dataset.wingetAction, button.dataset.packageId, button.dataset.packageName);
+      };
+    }
+  },
+
+  async loadInitial() {
+    try {
+      this.status = await IPC.send('winget_get_status');
+      if (!this.status.available) throw new Error(this.status.error || '当前系统未安装 WinGet');
+      const [installedResult, updatesResult] = await Promise.all([
+        IPC.send('winget_get_packages', { mode: 'installed' }),
+        IPC.send('winget_get_packages', { mode: 'updates' })
+      ]);
+      this.installed = installedResult.items || [];
+      this.updates = updatesResult.items || [];
+      this.updateSummary();
+      this.renderTable();
+    } catch (error) {
+      this.showLoadError(error.message);
+    }
+  },
+
+  updateSummary() {
+    const version = document.getElementById('wingetVersion');
+    const installedCount = document.getElementById('wingetInstalledCount');
+    const updateCount = document.getElementById('wingetUpdateCount');
+    const updateTabCount = document.getElementById('wingetUpdateTabCount');
+    const upgradeAll = document.getElementById('btnWingetUpgradeAll');
+    const lastRefresh = document.getElementById('wingetLastRefresh');
+
+    if (version) version.textContent = this.status?.available ? this.status.version : '不可用';
+    if (installedCount) installedCount.textContent = this.installed.length;
+    if (updateCount) updateCount.textContent = this.updates.length;
+    if (updateTabCount) updateTabCount.textContent = this.updates.length;
+    if (upgradeAll) upgradeAll.disabled = this.busy || this.updates.length === 0;
+    if (lastRefresh) lastRefresh.textContent = `更新于 ${new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}`;
+  },
+
+  switchTab(tab) {
+    this.activeTab = tab;
+    document.querySelectorAll('[data-winget-tab]').forEach(button => button.classList.toggle('active', button.dataset.wingetTab === tab));
+
+    const input = document.getElementById('wingetSearchInput');
+    const searchButton = document.getElementById('btnWingetSearch');
+    if (input) {
+      input.value = '';
+      input.placeholder = tab === 'search' ? '输入软件名称或包 ID...' : tab === 'updates' ? '筛选可更新软件...' : '筛选已安装软件...';
+    }
+    if (searchButton) searchButton.classList.toggle('d-none', tab !== 'search');
+    this.renderTable();
+    if (window.lucide) lucide.createIcons({ root: document.querySelector('.winget-panel') });
+  },
+
+  getVisibleItems() {
+    const source = this.activeTab === 'search' ? this.searchResults : this.activeTab === 'updates' ? this.updates : this.installed;
+    const input = document.getElementById('wingetSearchInput');
+    const query = input ? input.value.trim().toLowerCase() : '';
+    if (!query || this.activeTab === 'search') return source;
+    return source.filter(item => `${item.name} ${item.id} ${item.version} ${item.source}`.toLowerCase().includes(query));
+  },
+
+  renderTable() {
+    const head = document.getElementById('wingetTableHead');
+    const body = document.getElementById('wingetTableBody');
+    const resultCount = document.getElementById('wingetResultCount');
+    if (!head || !body) return;
+
+    const isSearch = this.activeTab === 'search';
+    const items = this.getVisibleItems();
+    head.innerHTML = `<tr>
+      <th>软件包</th>
+      <th>包 ID</th>
+      <th style="width:130px;">${isSearch ? '最新版本' : '当前版本'}</th>
+      <th style="width:130px;">${isSearch ? '匹配信息' : '可用版本'}</th>
+      <th style="width:92px;">来源</th>
+      <th style="width:112px;">操作</th>
+    </tr>`;
+
+    if (items.length === 0) {
+      const emptyText = isSearch ? '输入关键词搜索 winget 软件源' : this.activeTab === 'updates' ? '当前没有可用更新' : '没有匹配的软件包';
+      const emptyIcon = isSearch ? 'package-search' : this.activeTab === 'updates' ? 'badge-check' : 'package-x';
+      body.innerHTML = `<tr><td colspan="6"><div class="winget-empty-state"><i data-lucide="${emptyIcon}"></i><span>${emptyText}</span></div></td></tr>`;
+    } else {
+      body.innerHTML = items.map(item => this.renderRow(item, isSearch)).join('');
+    }
+
+    if (resultCount) resultCount.textContent = `${items.length} 项`;
+    if (window.lucide) lucide.createIcons({ root: body });
+  },
+
+  renderRow(item, isSearch) {
+    const name = this.escape(item.name || item.id);
+    const id = this.escape(item.id);
+    const currentVersion = this.escape(item.version || '--');
+    const availableVersion = this.escape(item.availableVersion || '已是最新');
+    const source = this.escape(item.source || '--');
+    const match = this.escape(item.match || '--');
+    let actionHtml;
+
+    if (isSearch) {
+      actionHtml = `<button class="btn btn-primary btn-sm winget-action-btn" data-winget-action="install" data-package-id="${id}" data-package-name="${name}"><i data-lucide="download"></i>安装</button>`;
+    } else if (item.availableVersion) {
+      actionHtml = `<button class="btn btn-primary btn-sm winget-action-btn" data-winget-action="upgrade" data-package-id="${id}" data-package-name="${name}"><i data-lucide="arrow-up"></i>升级</button>`;
+    } else {
+      actionHtml = `<button class="btn btn-outline-danger btn-sm winget-action-btn" data-winget-action="uninstall" data-package-id="${id}" data-package-name="${name}"><i data-lucide="trash-2"></i>卸载</button>`;
+    }
+
+    return `<tr>
+      <td><div class="winget-package-name" title="${name}">${name}</div></td>
+      <td><code class="winget-package-id" title="${id}">${id}</code></td>
+      <td class="font-mono">${currentVersion}</td>
+      <td>${isSearch ? `<span class="text-muted small">${match}</span>` : item.availableVersion ? `<span class="winget-version-update">${availableVersion}</span>` : `<span class="text-muted small">${availableVersion}</span>`}</td>
+      <td><span class="winget-source-badge">${source}</span></td>
+      <td>${actionHtml}</td>
+    </tr>`;
+  },
+
+  async searchPackages() {
+    const input = document.getElementById('wingetSearchInput');
+    const query = input ? input.value.trim() : '';
+    if (query.length < 2) {
+      Toast.show('请输入至少 2 个字符', 'warning');
+      return;
+    }
+
+    this.setBusy(true, `正在搜索 ${query}`);
+    this.showTableLoading('正在搜索 winget 软件源...');
+    try {
+      const result = await IPC.send('winget_search', { query });
+      this.searchResults = result.items || [];
+      this.renderTable();
+    } catch (error) {
+      this.showLoadError(error.message);
+    } finally {
+      this.setBusy(false);
+    }
+  },
+
+  async refreshCurrent() {
+    if (this.busy) return;
+    if (this.activeTab === 'search') {
+      const input = document.getElementById('wingetSearchInput');
+      if (input?.value.trim().length >= 2) await this.searchPackages();
+      return;
+    }
+
+    this.setBusy(true, '正在刷新软件包列表');
+    this.showTableLoading('正在刷新软件包列表...');
+    try {
+      const [installedResult, updatesResult] = await Promise.all([
+        IPC.send('winget_get_packages', { mode: 'installed' }),
+        IPC.send('winget_get_packages', { mode: 'updates' })
+      ]);
+      this.installed = installedResult.items || [];
+      this.updates = updatesResult.items || [];
+      this.updateSummary();
+      this.renderTable();
+    } catch (error) {
+      this.showLoadError(error.message);
+    } finally {
+      this.setBusy(false);
+    }
+  },
+
+  async runPackageAction(operation, packageId, packageName) {
+    const actionName = { install: '安装', upgrade: '升级', uninstall: '卸载', 'upgrade-all': '全部升级' }[operation];
+    const target = operation === 'upgrade-all' ? `${this.updates.length} 个软件包` : packageName;
+    if (!confirm(`确定要${actionName} ${target} 吗？`)) return;
+
+    this.setBusy(true, `正在${actionName} ${target}`);
+    await new Promise(resolve => requestAnimationFrame(resolve));
+    try {
+      const result = await IPC.send('winget_package_action', { operation, packageId });
+      Toast.show(`${actionName}已完成`, 'success', 3200);
+      try {
+        await this.reloadPackageLists();
+      } catch (refreshError) {
+        Toast.show(`操作已完成，但列表刷新失败: ${refreshError.message}`, 'warning', 5000);
+      }
+    } catch (error) {
+      Toast.show(`${actionName}失败: ${error.message}`, 'error', 6000);
+    } finally {
+      this.setBusy(false);
+    }
+  },
+
+  async reloadPackageLists() {
+    const [installedResult, updatesResult] = await Promise.all([
+      IPC.send('winget_get_packages', { mode: 'installed' }),
+      IPC.send('winget_get_packages', { mode: 'updates' })
+    ]);
+    this.installed = installedResult.items || [];
+    this.updates = updatesResult.items || [];
+    this.updateSummary();
+    this.renderTable();
+  },
+
+  setBusy(isBusy, message = '') {
+    this.busy = isBusy;
+    const bar = document.getElementById('wingetOperationBar');
+    const text = document.getElementById('wingetOperationText');
+    const refresh = document.getElementById('btnWingetRefresh');
+    const search = document.getElementById('btnWingetSearch');
+    if (bar) bar.classList.toggle('d-none', !isBusy);
+    if (text && message) text.textContent = message;
+    if (refresh) refresh.disabled = isBusy;
+    if (search) search.disabled = isBusy;
+    document.querySelectorAll('[data-winget-action]').forEach(button => button.disabled = isBusy);
+    this.updateSummary();
+  },
+
+  showTableLoading(message) {
+    const body = document.getElementById('wingetTableBody');
+    if (body) body.innerHTML = `<tr><td colspan="6" class="text-center text-muted py-5"><span class="spinner-border spinner-border-sm text-primary me-2"></span>${this.escape(message)}</td></tr>`;
+  },
+
+  showLoadError(message) {
+    const body = document.getElementById('wingetTableBody');
+    const version = document.getElementById('wingetVersion');
+    if (version && !this.status?.available) version.textContent = '不可用';
+    if (body) body.innerHTML = `<tr><td colspan="6"><div class="winget-empty-state error"><i data-lucide="triangle-alert"></i><span>${this.escape(message)}</span></div></td></tr>`;
+    if (window.lucide) lucide.createIcons({ root: body });
+  }
+};
+
 
 // Default Workspace Placeholder for tools under development
 const DefaultToolPlaceholder = {
@@ -4142,19 +4523,6 @@ const DefaultToolPlaceholder = {
 // ==========================================
 const ToolRegistry = {
   tools: [
-    // Dev tools
-    { id: 'json-formatter', title: 'JSON 格式化校验', category: 'dev', categoryName: '开发辅助', icon: 'braces', desc: '支持 JSON 语法校验、美化缩进排版、紧凑压缩及树状结构解析', tags: ['格式化', '开发', 'JSON'] },
-    { id: 'base64-codec', title: 'Base64 编解码器', category: 'dev', categoryName: '开发辅助', icon: 'binary', desc: '支持文本、URL 与文件二进制 Base64 双向安全编码与解码转换', tags: ['编解码', '转换', 'Base64'] },
-    { id: 'jwt-debugger', title: 'JWT Token 调试器', category: 'dev', categoryName: '开发辅助', icon: 'key-round', desc: '在线快速解析 JWT Header、Payload 载荷与过期时间检测', tags: ['开发', '安全', 'Token'] },
-    { id: 'regex-tester', title: '正则表达式测试', category: 'dev', categoryName: '开发辅助', icon: 'regex', desc: '常用正则表达式验证、实时匹配高亮、捕获组分析与常用规则库', tags: ['正则', '开发', '测试'] },
-    { id: 'uuid-generator', title: 'UUID / GUID 生成器', category: 'dev', categoryName: '开发辅助', icon: 'fingerprint', desc: '批量生成 UUID v4、v1 及 GUID 字符串，支持大小写与连字符定制', tags: ['生成器', '开发', 'UUID'] },
-    { id: 'timestamp-calc', title: '时间戳转换器', category: 'dev', categoryName: '开发辅助', icon: 'clock', desc: 'Unix 秒/毫秒时间戳与北京时间、UTC 时间双向精准格式化转换', tags: ['转换', '时间', '开发'] },
-
-    // Text tools
-    { id: 'hash-calc', title: 'Hash 哈希计算器', category: 'text', categoryName: '文本处理', icon: 'hash', desc: '计算字符串及文本文件的 MD5、SHA1、SHA256、SHA512 哈希指纹', tags: ['计算', '编解码', 'Hash'] },
-    { id: 'diff-viewer', title: '文本对比差分器', category: 'text', categoryName: '文本处理', icon: 'git-compare', desc: '左右分栏文本差异比对，逐行与逐字高亮显示增删改动内容', tags: ['对比', '文本', 'Diff'] },
-    { id: 'markdown-preview', title: 'Markdown 即时预览', category: 'text', categoryName: '文本处理', icon: 'file-code', desc: '所见即所得 Markdown 文本编辑器，支持 GFM 语法与 HTML 导出', tags: ['文本', '预览', 'Markdown'] },
-
     // Network tools (Fully implemented)
     { id: 'net-adapter-dns', title: '网卡与 DNS 切换器', category: 'network', categoryName: '网络工具', icon: 'network', desc: '查看网卡配置、一键切换 DHCP/静态 IP 与公共 DNS 方案，一键刷新 DNS 缓存', tags: ['网络', 'DNS', 'IP', '网卡'] },
     { id: 'lan-scanner', title: '局域网设备扫描发现', category: 'network', categoryName: '网络工具', icon: 'radar', desc: '扫描局域网在线设备 IP、MAC 地址、主机名并自动匹配网卡硬件厂商 OUI', tags: ['探测', '局域网', 'ARP', '扫描'] },
@@ -4168,6 +4536,7 @@ const ToolRegistry = {
 
     // System tools (Fully implemented)
     { id: 'service-manager', title: 'Windows 服务管理器', category: 'system', categoryName: '系统运维', icon: 'sliders', desc: '检索所有 Windows 系统服务，支持一键启动/停止/重启与修改自启动模式', tags: ['系统', '服务', '运维', 'Windows'] },
+    { id: 'winget-manager', title: 'WinGet 软件包管理', category: 'system', categoryName: '系统运维', icon: 'package-open', desc: '集中查看已安装软件与可用更新，支持搜索、安装、升级、卸载及批量更新', tags: ['系统', '软件', 'WinGet', '更新'] },
     { id: 'startup-auditor', title: '开机自启动项全面审计', category: 'system', categoryName: '系统运维', icon: 'rocket', desc: '审计注册表 Run、启动文件夹与计划任务中的开机自启项目，支持一键定位与移除', tags: ['系统', '自启', '优化', '注册表'] },
     { id: 'file-lock-hunter', title: '文件占用与句柄解锁', category: 'system', categoryName: '系统运维', icon: 'unlock', desc: '基于 Windows Restart Manager 原生定位锁定文件的进程 PID 与窗口，支持一键结束', tags: ['系统', '进程', '文件', '解锁'] },
     { id: 'system-specs', title: '硬件规格与系统健康', category: 'system', categoryName: '系统运维', icon: 'gauge', desc: '仪表盘展示 CPU、内存插槽、磁盘容量、GPU 显卡及系统开机运行时间 (Uptime)', tags: ['系统', '硬件', 'CPU', '内存', '健康'] },
@@ -4186,7 +4555,9 @@ const ToolRegistry = {
   init() {
     try {
       const favList = JSON.parse(localStorage.getItem('app_favorites') || '[]');
-      this.favorites = new Set(favList);
+      const validToolIds = new Set(this.tools.map(tool => tool.id));
+      this.favorites = new Set(favList.filter(toolId => validToolIds.has(toolId)));
+      localStorage.setItem('app_favorites', JSON.stringify(Array.from(this.favorites)));
     } catch (e) {
       this.favorites = new Set();
     }
@@ -4200,8 +4571,6 @@ const ToolRegistry = {
     const counts = {
       all: this.tools.length,
       fav: this.favorites.size,
-      dev: this.tools.filter(t => t.category === 'dev').length,
-      text: this.tools.filter(t => t.category === 'text').length,
       network: this.tools.filter(t => t.category === 'network').length,
       system: this.tools.filter(t => t.category === 'system').length
     };
@@ -4366,6 +4735,9 @@ const ToolRegistry = {
         case 'service-manager':
           ServiceManagerTool.render(mount);
           break;
+        case 'winget-manager':
+          WingetManagerTool.render(mount);
+          break;
         case 'startup-auditor':
           StartupAuditorTool.render(mount);
           break;
@@ -4488,10 +4860,8 @@ const ToolRegistry = {
 
   updateHeaderAndHero() {
     const titles = {
-      all: { name: '全部工具', icon: 'layout-grid', desc: '集合开发、文本、网络与系统相关实用功能' },
+      all: { name: '全部工具', icon: 'layout-grid', desc: '集合网络诊断与 Windows 系统运维实用功能' },
       fav: { name: '常用收藏', icon: 'star', desc: '已标星置顶的高频使用工具集' },
-      dev: { name: '开发辅助', icon: 'code-2', desc: '编码转换、格式化排版与算法调试助手' },
-      text: { name: '文本处理', icon: 'file-text', desc: '文本差分、Hash 哈希与文档即时渲染' },
       network: { name: '网络工具', icon: 'globe', desc: '端口探测、链路诊断与 API 模拟测试' },
       system: { name: '系统运维', icon: 'terminal-square', desc: '环境配置、系统进程与 Hosts 便捷管理' }
     };
