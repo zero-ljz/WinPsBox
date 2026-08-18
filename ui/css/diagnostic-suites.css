@@ -1,0 +1,47 @@
+.diagnostic-suite {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  gap: 12px;
+}
+
+.diagnostic-suite-header {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  padding: 8px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+}
+
+.diagnostic-suite-header .tool-nav-tabs {
+  width: fit-content;
+}
+
+.diagnostic-suite-header .tool-tab-btn svg {
+  width: 15px;
+  height: 15px;
+}
+
+.diagnostic-suite-panel {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.diagnostic-suite-panel > .tool-view-wrapper,
+.diagnostic-suite-panel > .nd-shell {
+  height: 100%;
+}
+
+@media (max-width: 720px) {
+  .diagnostic-suite-header {
+    overflow-x: auto;
+  }
+
+  .diagnostic-suite-header .tool-nav-tabs {
+    min-width: max-content;
+  }
+}

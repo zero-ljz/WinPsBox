@@ -32,29 +32,20 @@ const ToolRegistry = {
     { id: 'net-adapter-dns', title: '网卡与 DNS 切换器', category: 'network', categoryName: '网络工具', icon: 'network', desc: '查看网卡配置、一键切换 DHCP/静态 IP 与公共 DNS 方案，一键刷新 DNS 缓存', tags: ['网络', 'DNS', 'IP', '网卡'] },
     { id: 'portproxy-manager', title: 'Windows 端口代理管理器', category: 'network', categoryName: '网络工具', icon: 'waypoints', desc: '可视化管理 netsh interface portproxy v4tov4 转发规则，支持按需 UAC 提权', tags: ['网络', '端口', '转发', 'PortProxy'] },
     { id: 'lan-scanner', title: '局域网设备扫描发现', category: 'network', categoryName: '网络工具', icon: 'radar', desc: '扫描局域网在线设备 IP、MAC 地址、主机名并自动匹配网卡硬件厂商 OUI', tags: ['探测', '局域网', 'ARP', '扫描'] },
-    { id: 'ssl-checker', title: 'SSL / TLS 证书检测', category: 'network', categoryName: '网络工具', icon: 'shield-check', desc: '检测远程 HTTPS 域名 SSL 证书链、到期时间、SAN 域名列表与 TLS 协议套件', tags: ['安全', 'SSL', '证书', '网络'] },
+    { id: 'domain-diagnostic', title: '域名诊断', category: 'network', categoryName: '网络工具', icon: 'scan-search', desc: '集中检测 SSL / TLS 证书、DNS / DoH 解析以及 IP、ASN 与 Whois 注册信息', tags: ['网络', 'DNS', 'DoH', 'SSL', 'Whois', '诊断'] },
     { id: 'proxy-manager', title: '系统与终端代理管理', category: 'network', categoryName: '网络工具', icon: 'arrow-left-right', desc: '快速切换 Windows 系统全局/PAC 代理，并一键生成终端 HTTP/Socks5 代理环境变量', tags: ['网络', '代理', 'Proxy', '终端'] },
-    { id: 'file-server', title: '简易局域网文件分享', category: 'network', categoryName: '网络工具', icon: 'share-2', desc: '一键将本地文件夹或文件共享为局域网 Web 服务，自动生成手机扫码下载二维码', tags: ['网络', '文件', '分享', 'HTTP'] },
-    { id: 'route-tracer', title: '路由表与 Traceroute', category: 'network', categoryName: '网络工具', icon: 'git-branch', desc: '查看 Windows IPv4 路由表与网关跳数，提供图形化节点逐跳 Traceroute 路由追踪', tags: ['网络', '路由', 'Trace', '诊断'] },
     { id: 'port-checker', title: '端口占用与探测', category: 'network', categoryName: '网络工具', icon: 'activity', desc: '检测本地端口占用进程，或测试远程 IP / 域名的 TCP 端口连通性', tags: ['探测', '网络', '端口'] },
-    { id: 'ping-mtr', title: 'Ping & 网络诊断', category: 'network', categoryName: '网络工具', icon: 'wifi', desc: '实时 Ping 延迟检测与 DNS 解析诊断，提供网络质量可视化统计', tags: ['探测', '网络', '诊断'] },
-    { id: 'curl-builder', title: 'cURL / HTTP 调试台', category: 'network', categoryName: '网络工具', icon: 'send', desc: '可视化构造 GET/POST 请求，生成标准 cURL 命令与真实无跨域请求', tags: ['网络', '调试', 'HTTP'] },
+    { id: 'network-link-diagnostic', title: '网络链路诊断', category: 'network', categoryName: '网络工具', icon: 'route', desc: '统一执行 Ping 质量检测、逐跳 Traceroute 追踪并查看 Windows IPv4 路由表', tags: ['探测', '网络', '路由', 'Trace', '诊断'] },
     { id: 'socket-debugger', title: 'WebSocket / Socket 调试台', category: 'network', categoryName: '网络工具', icon: 'radio-tower', desc: '实时调试 WebSocket 与 TCP 长连接，支持文本、Hex、Base64 数据和收发帧检查', tags: ['网络', '调试', 'WebSocket', 'TCP'] },
     { id: 'local-cert-generator', title: '本地 CA 与多域名证书生成器', category: 'network', categoryName: '网络工具', icon: 'badge-check', desc: '创建并信任本地 Root CA，为 localhost、局域网 IP 与测试域名签发 SAN HTTPS 证书', tags: ['安全', '证书', 'HTTPS', '开发'] },
-    { id: 'dns-deep-diagnostic', title: 'DNS / DoH 深度解析诊断', category: 'network', categoryName: '网络工具', icon: 'scan-line', desc: '解析完整 DNS 记录，对比公共解析器与 DoH 响应，识别结果分歧和污染迹象', tags: ['网络', 'DNS', 'DoH', '诊断'] },
-    { id: 'ip-whois-intel', title: 'IP 归属地与 Whois 情报', category: 'network', categoryName: '网络工具', icon: 'map-pinned', desc: '聚合 IP 地理位置、ASN/BGP、网络类型判断与域名 RDAP/Whois 注册信息', tags: ['网络', 'IP', 'Whois', '情报'] },
 
     // System tools (Fully implemented)
     { id: 'service-manager', title: 'Windows 服务管理器', category: 'system', categoryName: '系统运维', icon: 'sliders', desc: '检索所有 Windows 系统服务，支持一键启动/停止/重启与修改自启动模式', tags: ['系统', '服务', '运维', 'Windows'] },
     { id: 'winget-manager', title: 'WinGet 软件包管理', category: 'system', categoryName: '系统运维', icon: 'package-open', desc: '集中查看已安装软件与可用更新，支持搜索、安装、升级、卸载及批量更新', tags: ['系统', '软件', 'WinGet', '更新'] },
-    { id: 'startup-auditor', title: '开机自启动项全面审计', category: 'system', categoryName: '系统运维', icon: 'rocket', desc: '审计注册表 Run、启动文件夹与计划任务中的开机自启项目，支持一键定位与移除', tags: ['系统', '自启', '优化', '注册表'] },
     { id: 'file-lock-hunter', title: '文件占用与句柄解锁', category: 'system', categoryName: '系统运维', icon: 'unlock', desc: '基于 Windows Restart Manager 原生定位锁定文件的进程 PID 与窗口，支持一键结束', tags: ['系统', '进程', '文件', '解锁'] },
-    { id: 'system-specs', title: '硬件规格与系统健康', category: 'system', categoryName: '系统运维', icon: 'gauge', desc: '仪表盘展示 CPU、内存插槽、磁盘容量、GPU 显卡及系统开机运行时间 (Uptime)', tags: ['系统', '硬件', 'CPU', '内存', '健康'] },
-    { id: 'system-launcher', title: '系统管理入口与上帝模式', category: 'system', categoryName: '系统运维', icon: 'terminal', desc: '一键快捷调起组策略、注册表、设备管理器、网络连接、磁盘管理与上帝模式', tags: ['系统', '快捷', '上帝模式', 'MMC'] },
     { id: 'scheduled-tasks', title: '定时任务中心', category: 'system', categoryName: '系统运维', icon: 'calendar-clock', desc: '定时关机、重启、睡眠、锁屏或运行程序，支持单次与每日计划', tags: ['系统', '定时', '计划任务', '自动化'] },
     { id: 'context-menu-manager', title: '右键菜单管理器', category: 'system', categoryName: '系统运维', icon: 'mouse-pointer-click', desc: '扫描并启用或禁用文件、文件夹、桌面与磁盘右键菜单项目', tags: ['系统', '右键菜单', '注册表', '优化'] },
     { id: 'env-viewer', title: '系统环境变量管理', category: 'system', categoryName: '系统运维', icon: 'layers', desc: '查看、检索与快捷编辑 Windows 用户与系统 PATH 及环境变量', tags: ['系统', '环境变量', '运维'] },
-    { id: 'process-viewer', title: '系统进程快速分析', category: 'system', categoryName: '系统运维', icon: 'cpu', desc: '基于 PowerShell 高性能获取系统进程内存、CPU 占用并支持一键终止', tags: ['系统', '进程', '运维'] },
     { id: 'hosts-editor', title: 'Hosts 快速切换器', category: 'system', categoryName: '系统运维', icon: 'server', desc: '快速读取与编辑系统 Hosts 映射规则，支持规则一键切换与备份', tags: ['系统', '网络', 'Hosts'] }
   ],
 
@@ -224,26 +215,17 @@ const ToolRegistry = {
         case 'lan-scanner':
           LanScannerTool.render(mount);
           break;
-        case 'ssl-checker':
-          SslCheckerTool.render(mount);
+        case 'domain-diagnostic':
+          DomainDiagnosticTool.render(mount);
           break;
         case 'proxy-manager':
           ProxyManagerTool.render(mount);
           break;
-        case 'file-server':
-          FileServerTool.render(mount);
-          break;
-        case 'route-tracer':
-          RouteTracerTool.render(mount);
-          break;
         case 'port-checker':
           PortCheckerTool.render(mount);
           break;
-        case 'ping-mtr':
-          PingTool.render(mount);
-          break;
-        case 'curl-builder':
-          CurlTool.render(mount);
+        case 'network-link-diagnostic':
+          NetworkLinkDiagnosticTool.render(mount);
           break;
         case 'socket-debugger':
           SocketDebuggerTool.render(mount);
@@ -251,13 +233,6 @@ const ToolRegistry = {
         case 'local-cert-generator':
           LocalCertificateTool.render(mount);
           break;
-        case 'dns-deep-diagnostic':
-          DnsDeepDiagnosticTool.render(mount);
-          break;
-        case 'ip-whois-intel':
-          IpWhoisIntelligenceTool.render(mount);
-          break;
-
         // System Tools
         case 'service-manager':
           ServiceManagerTool.render(mount);
@@ -265,17 +240,8 @@ const ToolRegistry = {
         case 'winget-manager':
           WingetManagerTool.render(mount);
           break;
-        case 'startup-auditor':
-          StartupAuditorTool.render(mount);
-          break;
         case 'file-lock-hunter':
           FileLockTool.render(mount);
-          break;
-        case 'system-specs':
-          SystemSpecsTool.render(mount);
-          break;
-        case 'system-launcher':
-          SystemLauncherTool.render(mount);
           break;
         case 'scheduled-tasks':
           ScheduledTaskTool.render(mount);
@@ -285,9 +251,6 @@ const ToolRegistry = {
           break;
         case 'env-viewer':
           EnvTool.render(mount);
-          break;
-        case 'process-viewer':
-          ProcessTool.render(mount);
           break;
         case 'hosts-editor':
           HostsTool.render(mount);
