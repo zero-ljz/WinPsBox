@@ -460,9 +460,21 @@ const AppNavigation = {
 // ==========================================
 const SettingsManager = {
   autoStartEnabled: false,
+  minimizeToTrayEnabled: true,
 
   async init() {
     const switchAutoStart = document.getElementById('switchAutoStart');
+    const switchMinimizeToTray = document.getElementById('switchMinimizeToTray');
+
+    try {
+      const config = await IPC.send('get_config');
+      this.minimizeToTrayEnabled = config?.minimizeToTray !== false;
+      if (switchMinimizeToTray) {
+        switchMinimizeToTray.checked = this.minimizeToTrayEnabled;
+      }
+    } catch (e) {
+      console.error('Failed to get tray behavior:', e);
+    }
 
     try {
       const res = await IPC.send('get_autostart');
@@ -506,12 +518,31 @@ const SettingsManager = {
         }
       });
     }
+
+    if (switchMinimizeToTray) {
+      switchMinimizeToTray.addEventListener('change', async (e) => {
+        const targetChecked = e.target.checked;
+        switchMinimizeToTray.disabled = true;
+        try {
+          await IPC.send('set_tray_behavior', { enabled: targetChecked });
+          this.minimizeToTrayEnabled = targetChecked;
+          Toast.show(targetChecked ? '窗口将收起到系统托盘' : '关闭窗口将直接退出应用', 'success', 2200);
+          this.saveConfig();
+        } catch (err) {
+          Toast.show('修改托盘行为失败: ' + err.message, 'error', 3000);
+          switchMinimizeToTray.checked = !targetChecked;
+        } finally {
+          switchMinimizeToTray.disabled = false;
+        }
+      });
+    }
   },
 
   async saveConfig() {
     const config = {
       theme: ThemeManager.currentTheme,
       autoStart: this.autoStartEnabled,
+      minimizeToTray: this.minimizeToTrayEnabled,
       favorites: Array.from(ToolRegistry.favorites)
     };
     try {

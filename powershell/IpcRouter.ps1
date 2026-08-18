@@ -70,6 +70,10 @@ function Register-AppWebViewHandlers($webView) {
                         $res = Save-AppConfig -configObj $payload.config
                         if (-not $res.success) { $response.success = $false; $response.error = $res.error }
                     }
+                    "set_tray_behavior" {
+                        $res = Set-AppTrayBehavior -enabled ([bool]$payload.enabled)
+                        if ($res.success) { $response.data = @{ enabled = $script:MinimizeToTray } } else { $response.success = $false; $response.error = $res.error }
+                    }
                     "open_external" {
                         $url = $payload.url
                         if ($url -and ($url.StartsWith("http://") -or $url.StartsWith("https://"))) {
@@ -100,6 +104,7 @@ function Register-AppWebViewHandlers($webView) {
                             $t.Interval = 600
                             $t.Add_Tick({
                                 $t.Stop()
+                                $script:AllowAppExit = $true
                                 $form.Close()
                             })
                             $t.Start()

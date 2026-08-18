@@ -111,7 +111,7 @@ function Set-AutoStartStatus([bool]$enable) {
             if (Test-Path $batPath) {
                 $batPath = (Resolve-Path $batPath).Path
             }
-            $cmd = "`"$batPath`""
+            $cmd = "`"$batPath`" --StartMinimized"
             Set-ItemProperty -Path $RunKey -Name $AppName -Value $cmd -Force | Out-Null
             return @{ success = $true; enabled = $true; message = "Auto-start enabled" }
         }
@@ -136,6 +136,7 @@ function Get-AppConfig {
     return [PSCustomObject]@{
         theme = "system"
         autoStart = (Get-AutoStartStatus)
+        minimizeToTray = $true
         favorites = @()
     }
 }

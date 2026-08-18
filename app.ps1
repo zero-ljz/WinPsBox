@@ -1,6 +1,8 @@
 ﻿Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
+$StartMinimized = $args -contains "--StartMinimized"
+
 $script:AppRoot = $PSScriptRoot
 $script:PowerShellRoot = Join-Path $script:AppRoot "powershell"
 
@@ -23,6 +25,7 @@ Add-Type -Path (Join-Path $libPath "Microsoft.Web.WebView2.WinForms.dll")
 . (Join-Path $script:PowerShellRoot "SystemTools.ps1")
 . (Join-Path $script:PowerShellRoot "NetworkDeveloperTools.ps1")
 . (Join-Path $script:PowerShellRoot "WingetBridge.ps1")
+. (Join-Path $script:PowerShellRoot "TrayIcon.ps1")
 . (Join-Path $script:PowerShellRoot "IpcRouter.ps1")
 
 # ----------------- Main Window -----------------
@@ -46,6 +49,13 @@ $webView.Dock = [System.Windows.Forms.DockStyle]::Fill
 Register-AppWebViewHandlers -webView $webView
 
 $form.Controls.Add($webView)
+Initialize-AppTray
+
+if ($StartMinimized) {
+    $script:TrayHintShown = $true
+    $form.WindowState = [System.Windows.Forms.FormWindowState]::Minimized
+    $form.ShowInTaskbar = $false
+}
 
 $form.Add_Shown({
     try {
@@ -61,6 +71,10 @@ $form.Add_Shown({
             [System.Windows.Forms.MessageBoxIcon]::Error
         )
     }
+
+    if ($StartMinimized) {
+        $form.BeginInvoke([Action]{ Hide-AppToTray -showHint $false }) | Out-Null
+    }
 })
 
-[void]$form.ShowDialog()
+[System.Windows.Forms.Application]::Run($form)
