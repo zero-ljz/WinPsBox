@@ -1,0 +1,466 @@
+/**
+ * DevTools Box - Lightweight Desktop Toolbox
+ * Modules: IPC Bridge, ThemeManager, ToolRegistry, Tool Workspace Renderers, SettingsManager, Toast
+ */
+
+// ==========================================
+// 1. IPC Communication Bridge
+// ==========================================
+const IPC = {
+  callbacks: new Map(),
+  reqCounter: 0,
+  isWebView: Boolean(window.chrome && window.chrome.webview),
+
+  init() {
+    if (this.isWebView) {
+      window.chrome.webview.addEventListener('message', (event) => {
+        let msg = event.data;
+        if (typeof msg === 'string') {
+          try {
+            msg = JSON.parse(msg);
+          } catch (e) {
+            console.error('Failed to parse IPC message:', e);
+            return;
+          }
+        }
+        if (msg && msg.id && this.callbacks.has(msg.id)) {
+          const { resolve, reject } = this.callbacks.get(msg.id);
+          this.callbacks.delete(msg.id);
+          if (msg.success) {
+            resolve(msg.data);
+          } else {
+            reject(new Error(msg.error || 'IPC call failed'));
+          }
+        }
+      });
+    } else {
+      console.warn('Running outside WebView2. Using mock handlers for standalone browser preview.');
+    }
+  },
+
+  send(action, payload = {}) {
+    return new Promise((resolve, reject) => {
+      const id = 'req_' + (++this.reqCounter) + '_' + Date.now();
+      if (!this.isWebView) {
+        this.mockHandle(action, payload, resolve, reject);
+        return;
+      }
+      this.callbacks.set(id, { resolve, reject });
+      window.chrome.webview.postMessage({ id, action, payload });
+
+      // Timeout safeguard
+      const timeoutMs = action === 'winget_package_action'
+        ? 15 * 60 * 1000
+        : (action.startsWith('winget_') || action === 'net_http_request' || action === 'net_ping' || action === 'net_check_remote_port' || action === 'net_trace_route' || action === 'net_scan_lan')
+          ? 60000
+          : 15000;
+      setTimeout(() => {
+        if (this.callbacks.has(id)) {
+          this.callbacks.delete(id);
+          reject(new Error(`IPC Timeout for action: ${action}`));
+        }
+      }, timeoutMs);
+    });
+  },
+
+  mockHandle(action, payload, resolve, reject) {
+    setTimeout(() => {
+      switch (action) {
+        case 'get_autostart':
+          resolve({ enabled: localStorage.getItem('mock_autostart') === 'true' });
+          break;
+        case 'set_autostart':
+          localStorage.setItem('mock_autostart', payload.enabled);
+          resolve({ enabled: payload.enabled, message: 'Mock autostart toggled' });
+          break;
+        case 'get_config':
+          resolve({
+            theme: localStorage.getItem('app_theme') || 'system',
+            autoStart: localStorage.getItem('mock_autostart') === 'true',
+            favorites: JSON.parse(localStorage.getItem('app_favorites') || '[]')
+          });
+          break;
+        case 'save_config':
+          resolve({ success: true });
+          break;
+        case 'get_system_info':
+          resolve({ os: 'Windows 11 (Browser Preview)', psVersion: '7.4.x / 5.1', appVersion: 'v1.0.0', isAdmin: localStorage.getItem('mock_admin') === 'true' });
+          break;
+        case 'get_privilege_info':
+          resolve({ isAdmin: localStorage.getItem('mock_admin') === 'true', userName: 'DevUser', userDomain: 'WORKGROUP' });
+          break;
+        case 'sys_elevate_app':
+          localStorage.setItem('mock_admin', 'true');
+          resolve({ success: true, message: '模拟管理员实例已启动' });
+          break;
+
+        // Mock Network Tools
+        case 'net_get_local_ports':
+          resolve([
+            { protocol: 'TCP', localAddress: '0.0.0.0', localPort: 80, remoteAddress: '0.0.0.0', remotePort: 0, state: 'Listen', pid: 4, processName: 'System' },
+            { protocol: 'TCP', localAddress: '127.0.0.1', localPort: 3306, remoteAddress: '0.0.0.0', remotePort: 0, state: 'Listen', pid: 3120, processName: 'mysqld' },
+            { protocol: 'TCP', localAddress: '127.0.0.1', localPort: 6379, remoteAddress: '0.0.0.0', remotePort: 0, state: 'Listen', pid: 5412, processName: 'redis-server' },
+            { protocol: 'TCP', localAddress: '0.0.0.0', localPort: 135, remoteAddress: '0.0.0.0', remotePort: 0, state: 'Listen', pid: 980, processName: 'svchost' },
+            { protocol: 'UDP', localAddress: '0.0.0.0', localPort: 5353, remoteAddress: '*', remotePort: '*', state: 'Listening', pid: 1420, processName: 'mDNSResponder' }
+          ]);
+          break;
+        case 'net_check_remote_port':
+          resolve((payload.ports || [80, 443]).map(p => ({
+            port: p,
+            isOpen: p === 80 || p === 443,
+            latencyMs: p === 80 ? 24.5 : p === 443 ? 28.1 : 1500,
+            error: (p === 80 || p === 443) ? null : 'Connection timed out'
+          })));
+          break;
+        case 'net_ping':
+          resolve({
+            target: payload.host || 'baidu.com',
+            dnsIps: ['180.101.50.242', '180.101.50.188'],
+            sent: 4,
+            received: 4,
+            lossRate: 0,
+            minTime: 18,
+            maxTime: 23,
+            avgTime: 20.5,
+            records: [
+              { seq: 1, ip: '180.101.50.242', timeMs: 19, ttl: 53, status: 'Success' },
+              { seq: 2, ip: '180.101.50.242', timeMs: 18, ttl: 53, status: 'Success' },
+              { seq: 3, ip: '180.101.50.242', timeMs: 23, ttl: 53, status: 'Success' },
+              { seq: 4, ip: '180.101.50.242', timeMs: 22, ttl: 53, status: 'Success' }
+            ]
+          });
+          break;
+        case 'net_http_request':
+          resolve({
+            success: true,
+            statusCode: 200,
+            statusText: 'OK',
+            headers: { 'content-type': 'application/json; charset=utf-8', 'server': 'MockServer/1.0' },
+            body: JSON.stringify({ message: 'Hello from mock HTTP response', timestamp: Date.now(), url: payload.url }, null, 2),
+            timeMs: 86.4,
+            sizeBytes: 128
+          });
+          break;
+
+        // Mock System Tools
+        case 'sys_get_env_vars':
+          resolve({
+            userVars: [
+              { name: 'Path', value: 'C:\\Users\\User\\bin;C:\\Users\\User\\.cargo\\bin', scope: 'User' },
+              { name: 'JAVA_HOME', value: 'C:\\Program Files\\Java\\jdk-17', scope: 'User' },
+              { name: 'NODE_ENV', value: 'development', scope: 'User' }
+            ],
+            machineVars: [
+              { name: 'OS', value: 'Windows_NT', scope: 'Machine' },
+              { name: 'Path', value: 'C:\\Windows\\System32;C:\\Program Files\\PowerShell\\7;C:\\NonExistentPath_Test', scope: 'Machine' },
+              { name: 'PROCESSOR_ARCHITECTURE', value: 'AMD64', scope: 'Machine' }
+            ],
+            pathAnalysis: [
+              { path: 'C:\\Windows\\System32', exists: true },
+              { path: 'C:\\Program Files\\PowerShell\\7', exists: true },
+              { path: 'C:\\Users\\User\\bin', exists: true },
+              { path: 'C:\\NonExistentPath_Test', exists: false }
+            ]
+          });
+          break;
+        case 'sys_set_env_var':
+        case 'sys_delete_env_var':
+          resolve({ success: true });
+          break;
+        case 'sys_get_processes':
+          resolve([
+            { pid: 4, name: 'System', memoryMB: 12.4, cpu: 1.2, responding: true, path: '', description: 'NT Kernel' },
+            { pid: 1024, name: 'powershell', memoryMB: 128.5, cpu: 0.5, responding: true, path: 'C:\\Windows\\System32\\powershell.exe', description: 'Windows PowerShell' },
+            { pid: 2450, name: 'msedge', memoryMB: 480.2, cpu: 4.8, responding: true, path: 'C:\\Program Files\\Microsoft\\Edge\\msedge.exe', description: 'Microsoft Edge' },
+            { pid: 3820, name: 'Code', memoryMB: 320.0, cpu: 2.1, responding: true, path: 'C:\\Users\\User\\AppData\\Local\\Programs\\VSCode\\Code.exe', description: 'Visual Studio Code' }
+          ]);
+          break;
+        case 'sys_kill_process':
+          resolve({ success: true, message: `Process ${payload.pid} terminated (Mock)` });
+          break;
+        case 'sys_get_hosts':
+          resolve({
+            success: true,
+            path: 'C:\\Windows\\System32\\drivers\\etc\\hosts',
+            content: '# Copyright (c) 1993-2009 Microsoft Corp.\n127.0.0.1 localhost\n::1 localhost\n# 127.0.0.1 test.dev.local\n199.232.69.194 github.global.ssl.fastly.net\n'
+          });
+          break;
+        case 'sys_save_hosts':
+          resolve({ success: true, message: 'Hosts saved successfully (Mock)' });
+          break;
+
+
+        // --- 11 New Tools Mock Handlers ---
+        case 'net_get_adapters':
+          resolve([
+            {
+              name: 'Realtek PCIe GbE Family Controller',
+              interfaceAlias: '以太网',
+              interfaceIndex: 12,
+              status: 'Up',
+              macAddress: 'B4-2E-99-4A-12-88',
+              linkSpeed: '1 Gbps',
+              ipAddresses: ['192.168.1.108'],
+              prefixLengths: [24],
+              dnsServers: ['223.5.5.5', '223.6.6.6'],
+              gateway: '192.168.1.1',
+              dhcpEnabled: false,
+              isPhysical: true
+            },
+            {
+              name: 'Intel(R) Wi-Fi 6 AX200 160MHz',
+              interfaceAlias: 'WLAN',
+              interfaceIndex: 18,
+              status: 'Down',
+              macAddress: '54-EE-75-BC-33-01',
+              linkSpeed: '0 bps',
+              ipAddresses: [],
+              prefixLengths: [],
+              dnsServers: [],
+              gateway: '',
+              dhcpEnabled: true,
+              isPhysical: true
+            },
+            {
+              name: 'vEthernet (Default Switch)',
+              interfaceAlias: 'vEthernet (Default Switch)',
+              interfaceIndex: 24,
+              status: 'Up',
+              macAddress: '00-15-5D-38-01-20',
+              linkSpeed: '10 Gbps',
+              ipAddresses: ['172.28.16.1'],
+              prefixLengths: [20],
+              dnsServers: [],
+              gateway: '',
+              dhcpEnabled: false,
+              isPhysical: false
+            }
+          ]);
+          break;
+        case 'net_set_adapter_dns':
+          resolve({ success: true, message: `已成功更新 [${payload.interfaceAlias}] DNS 设置 (Mock)` });
+          break;
+        case 'net_set_adapter_ip':
+          resolve({ success: true, message: `已成功更新 [${payload.interfaceAlias}] IP 设置 (Mock)` });
+          break;
+        case 'net_flush_dns_winsock':
+          resolve({ success: true, message: 'DNS 解析缓存已刷新 (Mock)' });
+          break;
+        case 'net_scan_lan':
+          resolve({
+            success: true,
+            subnet: payload.subnet || '192.168.1',
+            totalScanned: 254,
+            foundCount: 6,
+            devices: [
+              { ip: '192.168.1.1', mac: '50-3E-AA-21-44-01', hostName: 'gateway.local', vendor: 'TP-Link', latencyMs: 1.2, isLocal: false, status: 'Online' },
+              { ip: '192.168.1.100', mac: '70-85-C2-88-11-22', hostName: 'HUAWEI-MateBook', vendor: 'Huawei', latencyMs: 3.5, isLocal: false, status: 'Online' },
+              { ip: '192.168.1.105', mac: 'F0-18-98-33-22-11', hostName: 'iPhone-15-Pro', vendor: 'Apple', latencyMs: 12.4, isLocal: false, status: 'Online' },
+              { ip: '192.168.1.108', mac: 'B4-2E-99-4A-12-88', hostName: 'DESKTOP-MAIN', vendor: '本机设备', latencyMs: 0, isLocal: true, status: 'Online' },
+              { ip: '192.168.1.120', mac: '50-D2-F5-66-77-88', hostName: 'Xiaomi-AX6000', vendor: 'Xiaomi', latencyMs: 2.1, isLocal: false, status: 'Online' },
+              { ip: '192.168.1.200', mac: '00-0C-29-FE-33-11', hostName: 'ubuntu-server', vendor: 'VMware', latencyMs: 0.8, isLocal: false, status: 'Online' }
+            ]
+          });
+          break;
+        case 'net_check_ssl':
+          resolve({
+            success: true,
+            host: payload.host || 'github.com',
+            port: payload.port || 443,
+            subject: 'CN=github.com, O=GitHub\\, Inc., L=San Francisco, S=California, C=US',
+            issuer: 'CN=DigiCert TLS Hybrid ECC SHA384 2020 CA1, O=DigiCert Inc, C=US',
+            validFrom: '2025-02-14 08:00:00',
+            validTo: '2026-03-15 08:00:00',
+            daysRemaining: 185.5,
+            totalDays: 395,
+            percentElapsed: 53.0,
+            isExpired: false,
+            isExpiringSoon: false,
+            serialNumber: '0D83897B34BAA9292881E993',
+            thumbprint: 'AA898FE8374987E8B83748239019283748921829',
+            signatureAlgorithm: 'sha384ECDSA',
+            keyAlgorithm: 'ECC',
+            keySize: 256,
+            protocol: 'Tls13',
+            cipherAlgorithm: 'AES_256_GCM',
+            cipherStrength: 256,
+            sans: ['github.com', '*.github.com', 'github.io', '*.github.io'],
+            chain: [
+              { subject: 'CN=github.com', issuer: 'DigiCert TLS Hybrid ECC SHA384 2020 CA1', validTo: '2026-03-15' },
+              { subject: 'CN=DigiCert TLS Hybrid ECC SHA384 2020 CA1', issuer: 'DigiCert Global Root CA', validTo: '2030-04-14' }
+            ]
+          });
+          break;
+        case 'net_get_proxy':
+          resolve({
+            success: true,
+            enabled: false,
+            server: '127.0.0.1:7890',
+            override: '<local>;localhost;127.*;192.168.*',
+            pacUrl: ''
+          });
+          break;
+        case 'net_set_proxy':
+          resolve({
+            success: true,
+            enabled: payload.enabled,
+            server: payload.server,
+            override: payload.override,
+            pacUrl: payload.pacUrl,
+            message: payload.enabled ? `系统代理已开启: ${payload.server}` : '系统代理已关闭'
+          });
+          break;
+        case 'net_start_file_server':
+          resolve({
+            success: true,
+            running: true,
+            port: payload.port || 8000,
+            path: payload.path || 'C:\\Users\\User\\Downloads',
+            urls: [`http://192.168.1.108:${payload.port || 8000}/`, `http://127.0.0.1:${payload.port || 8000}/`]
+          });
+          break;
+        case 'net_stop_file_server':
+          resolve({ success: true, running: false });
+          break;
+        case 'net_get_file_server_status':
+          resolve({ success: true, running: false, port: 8000, path: '', urls: [] });
+          break;
+        case 'net_get_route_table':
+          resolve([
+            { destination: '0.0.0.0/0', nextHop: '192.168.1.1', interfaceAlias: '以太网', interfaceIndex: 12, metric: 25, ifMetric: 25, protocol: 'NetMgmt' },
+            { destination: '127.0.0.0/8', nextHop: '0.0.0.0', interfaceAlias: 'Loopback', interfaceIndex: 1, metric: 256, ifMetric: 75, protocol: 'Local' },
+            { destination: '192.168.1.0/24', nextHop: '0.0.0.0', interfaceAlias: '以太网', interfaceIndex: 12, metric: 281, ifMetric: 25, protocol: 'Local' },
+            { destination: '172.28.16.0/20', nextHop: '0.0.0.0', interfaceAlias: 'vEthernet', interfaceIndex: 24, metric: 281, ifMetric: 15, protocol: 'Local' }
+          ]);
+          break;
+        case 'net_trace_route':
+          resolve({
+            target: payload.host || '114.114.114.114',
+            hops: [
+              { hop: 1, ip: '192.168.1.1', hostname: 'router.local', latencyMs: 1.1, status: 'Success' },
+              { hop: 2, ip: '100.64.0.1', hostname: 'bras.isp.net', latencyMs: 4.8, status: 'Success' },
+              { hop: 3, ip: '218.2.132.1', hostname: '', latencyMs: 8.2, status: 'Success' },
+              { hop: 4, ip: '202.97.45.18', hostname: 'chinanet.backbone', latencyMs: 14.5, status: 'Success' },
+              { hop: 5, ip: '114.114.114.114', hostname: 'public1.114dns.com', latencyMs: 16.2, status: 'Success' }
+            ]
+          });
+          break;
+        case 'sys_get_services':
+          resolve([
+            { name: 'MySQL', displayName: 'MySQL Database Server 8.0', status: 'Running', startMode: 'Auto', pid: 3120, pathName: 'C:\\Program Files\\MySQL\\bin\\mysqld.exe', description: 'MySQL Server relational database daemon' },
+            { name: 'Redis', displayName: 'Redis In-Memory Data Store', status: 'Running', startMode: 'Auto', pid: 5412, pathName: 'C:\\Redis\\redis-server.exe', description: 'Redis memory cache and key-value database' },
+            { name: 'nginx', displayName: 'Nginx Web Server', status: 'Stopped', startMode: 'Manual', pid: 0, pathName: 'C:\\nginx\\nginx.exe', description: 'High performance web server and reverse proxy' },
+            { name: 'Spooler', displayName: 'Print Spooler', status: 'Running', startMode: 'Auto', pid: 1450, pathName: 'C:\\Windows\\System32\\spoolsv.exe', description: 'Manages all local and network print queues' },
+            { name: 'W32Time', displayName: 'Windows Time', status: 'Running', startMode: 'Manual', pid: 980, pathName: 'C:\\Windows\\System32\\svchost.exe', description: 'Maintains date and time synchronization on clients and servers' },
+            { name: 'WinRM', displayName: 'Windows Remote Management (WS-Management)', status: 'Stopped', startMode: 'Manual', pid: 0, pathName: 'C:\\Windows\\System32\\svchost.exe', description: 'Implements WS-Management protocol for remote management' },
+            { name: 'wuauserv', displayName: 'Windows Update', status: 'Running', startMode: 'Manual', pid: 820, pathName: 'C:\\Windows\\System32\\svchost.exe', description: 'Enables detection, download, and installation of updates' }
+          ]);
+          break;
+        case 'sys_set_service_state':
+          resolve({ success: true, message: `服务 [${payload.name}] 执行 [${payload.action}] 成功 (Mock)` });
+          break;
+        case 'sys_set_service_start_type':
+          resolve({ success: true, message: `服务 [${payload.name}] 启动类型已更新为 [${payload.startType}] (Mock)` });
+          break;
+        case 'sys_get_startup_items':
+          resolve([
+            { id: 'hkcu_OneDrive', name: 'Microsoft OneDrive', command: '"C:\\Users\\User\\AppData\\Local\\Microsoft\\OneDrive\\OneDrive.exe" /background', targetPath: 'C:\\Users\\User\\AppData\\Local\\Microsoft\\OneDrive\\OneDrive.exe', locationType: '注册表 (当前用户)', locationPath: 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run', enabled: true, fileExists: true },
+            { id: 'hkcu_Discord', name: 'Discord', command: 'C:\\Users\\User\\AppData\\Local\\Discord\\Update.exe --processStart Discord.exe', targetPath: 'C:\\Users\\User\\AppData\\Local\\Discord\\Update.exe', locationType: '注册表 (当前用户)', locationPath: 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run', enabled: true, fileExists: true },
+            { id: 'hklm_SecurityHealth', name: 'SecurityHealth', command: '%windir%\\system32\\SecurityHealthSystray.exe', targetPath: 'C:\\Windows\\system32\\SecurityHealthSystray.exe', locationType: '注册表 (系统所有用户)', locationPath: 'HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run', enabled: true, fileExists: true },
+            { id: 'folder_user_Docker', name: 'Docker Desktop.lnk', command: 'C:\\Program Files\\Docker\\Docker\\Docker Desktop.exe', targetPath: 'C:\\Program Files\\Docker\\Docker\\Docker Desktop.exe', locationType: '启动文件夹 (用户)', locationPath: 'C:\\Users\\User\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Startup', enabled: true, fileExists: true }
+          ]);
+          break;
+        case 'sys_remove_startup_item':
+          resolve({ success: true, message: `已移除自启动项 [${payload.name}] (Mock)` });
+          break;
+        case 'sys_get_file_locks':
+          resolve({
+            success: true,
+            path: payload.path || 'C:\\Test\\example.db',
+            locked: true,
+            lockCount: 1,
+            processes: [
+              { pid: 3820, name: 'Code.exe', title: 'pwsh-webui-app1 - Visual Studio Code', path: 'C:\\Users\\User\\AppData\\Local\\Programs\\VSCode\\Code.exe', memoryMB: 320.5 }
+            ]
+          });
+          break;
+        case 'sys_get_hardware_specs':
+          resolve({
+            success: true,
+            cpu: { name: '13th Gen Intel(R) Core(TM) i7-13700K', manufacturer: 'GenuineIntel', cores: 16, threads: 24, maxClockSpeedMHz: 3400, socket: 'LGA1700', loadPercent: 12 },
+            memory: {
+              totalGB: 32.0,
+              freeGB: 18.4,
+              usedGB: 13.6,
+              percentUsed: 42.5,
+              slots: [
+                { slot: 'DIMM 1', capacityGB: 16.0, speedMHz: 6000, manufacturer: 'Kingston', partNumber: 'KF560C36-16' },
+                { slot: 'DIMM 3', capacityGB: 16.0, speedMHz: 6000, manufacturer: 'Kingston', partNumber: 'KF560C36-16' }
+              ]
+            },
+            disks: [
+              { drive: 'C:', volumeName: '系统盘 (Windows)', fileSystem: 'NTFS', totalGB: 512.0, freeGB: 284.5, usedGB: 227.5, percentUsed: 44.4 },
+              { drive: 'D:', volumeName: '工作数据 (Data)', fileSystem: 'NTFS', totalGB: 1024.0, freeGB: 650.2, usedGB: 373.8, percentUsed: 36.5 }
+            ],
+            physicalDisks: [
+              { model: 'Samsung SSD 980 PRO 1TB', sizeGB: 1000.0, interfaceType: 'NVMe', mediaType: 'SSD' }
+            ],
+            gpus: [
+              { name: 'NVIDIA GeForce RTX 4070', driverVersion: '551.86', memoryMB: 12288, status: 'OK' }
+            ],
+            os: {
+              caption: 'Microsoft Windows 11 Pro 64-Bit',
+              version: '10.0.22631',
+              buildNumber: '22631.3296',
+              architecture: '64-bit',
+              installDate: '2024-01-10 14:22:00',
+              lastBootTime: '2026-08-16 09:12:00',
+              uptime: '2 天 6 小时 44 分钟',
+              computerName: 'DEV-WORKSTATION',
+              userName: 'Developer',
+              isAdmin: true
+            }
+          });
+          break;
+        case 'sys_launch_shortcut':
+          resolve({ success: true, message: `已成功调起系统工具: ${payload.toolKey} (Mock)` });
+          break;
+        case 'winget_get_status':
+          resolve({ available: true, version: 'v1.29.280', error: null });
+          break;
+        case 'winget_get_packages': {
+          const installed = [
+            { name: '7-Zip', id: '7zip.7zip', version: '23.01', availableVersion: '26.02', source: 'winget' },
+            { name: 'Git', id: 'Git.Git', version: '2.45.0', availableVersion: '2.55.0.3', source: 'winget' },
+            { name: 'Microsoft PowerShell', id: 'Microsoft.PowerShell', version: '7.5.2.0', availableVersion: '', source: 'winget' },
+            { name: 'Visual Studio Code', id: 'Microsoft.VisualStudioCode', version: '1.103.1', availableVersion: '', source: 'winget' },
+            { name: 'Windows Terminal', id: 'Microsoft.WindowsTerminal', version: '1.22.11141.0', availableVersion: '', source: 'winget' }
+          ];
+          const items = payload.mode === 'updates' ? installed.filter(item => item.availableVersion) : installed;
+          resolve({ success: true, items, count: items.length, mode: payload.mode || 'installed' });
+          break;
+        }
+        case 'winget_search':
+          resolve({
+            success: true,
+            query: payload.query,
+            count: 4,
+            items: [
+              { name: 'PowerShell', id: 'Microsoft.PowerShell', version: '7.6.5.0', source: 'winget', match: '' },
+              { name: 'WinPaletter', id: 'Abdelrhman-AK.WinPaletter', version: '1.0.9.9', source: 'winget', match: 'Tag: powershell' },
+              { name: 'Atuin', id: 'Atuinsh.Atuin', version: '18.19.0', source: 'winget', match: 'Tag: powershell' },
+              { name: 'Chocolatey', id: 'Chocolatey.Chocolatey', version: '2.7.3.0', source: 'winget', match: 'Tag: powershell' }
+            ]
+          });
+          break;
+        case 'winget_package_action':
+          resolve({ success: true, operation: payload.operation, packageId: payload.packageId || '', message: '操作已完成 (Mock)' });
+          break;
+
+        default:
+          resolve({ success: true });
+      }
+    }, 60);
+  }
+};
+

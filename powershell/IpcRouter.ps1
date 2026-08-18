@@ -1,0 +1,333 @@
+﻿# WebView2 IPC registration and request routing.
+function Register-AppWebViewHandlers($webView) {
+    $webView.add_CoreWebView2InitializationCompleted({
+        param($sender, $eventArgs)
+    
+        if (-not $eventArgs.IsSuccess) {
+            $message = if ($eventArgs.InitializationException) {
+                $exception = $eventArgs.InitializationException
+                "Type: $($exception.GetType().FullName)`r`nHResult: 0x$('{0:X8}' -f ($exception.HResult -band 0xffffffff))`r`n$($exception.ToString())"
+            } else {
+                "WebView2 initialization failed. User data folder: $userDataPath"
+            }
+    
+            [System.Windows.Forms.MessageBox]::Show(
+                $message,
+                "WebView2 Error",
+                [System.Windows.Forms.MessageBoxButtons]::OK,
+                [System.Windows.Forms.MessageBoxIcon]::Error
+            )
+            return
+        }
+    
+        # Register IPC message receiver
+        $sender.CoreWebView2.add_WebMessageReceived({
+            param($s, $e)
+            try {
+                $rawJson = $e.WebMessageAsJson
+                $request = ConvertFrom-Json $rawJson
+                $reqId = $request.id
+                $action = $request.action
+                $payload = $request.payload
+    
+                if ($action -like "winget_*") {
+                    $queueResult = Start-WingetWorkerRequest -webViewCore $s -requestId $reqId -action $action -payload $payload
+                    if (-not $queueResult.success) {
+                        $queueError = @{
+                            id = $reqId
+                            action = $action
+                            success = $false
+                            data = $null
+                            error = $queueResult.error
+                        }
+                        $s.PostWebMessageAsJson((ConvertTo-Json -InputObject $queueError -Compress -Depth 10))
+                    }
+                    return
+                }
+    
+                $response = [ordered]@{
+                    id = $reqId
+                    action = $action
+                    success = $true
+                    data = $null
+                    error = $null
+                }
+    
+                switch ($action) {
+                    # Settings & General
+                    "get_autostart" {
+                        $response.data = @{ enabled = (Get-AutoStartStatus) }
+                    }
+                    "set_autostart" {
+                        $enabled = [bool]($payload.enabled)
+                        $res = Set-AutoStartStatus -enable $enabled
+                        if ($res.success) { $response.data = $res } else { $response.success = $false; $response.error = $res.error }
+                    }
+                    "get_config" {
+                        $response.data = Get-AppConfig
+                    }
+                    "save_config" {
+                        $res = Save-AppConfig -configObj $payload.config
+                        if (-not $res.success) { $response.success = $false; $response.error = $res.error }
+                    }
+                    "open_external" {
+                        $url = $payload.url
+                        if ($url -and ($url.StartsWith("http://") -or $url.StartsWith("https://"))) {
+                            Start-Process $url
+                        }
+                    }
+                    "get_system_info" {
+                        $response.data = @{
+                            os = (Get-CimInstance Win32_OperatingSystem -ErrorAction SilentlyContinue).Caption
+                            psVersion = $PSVersionTable.PSVersion.ToString()
+                            appVersion = "1.0.0"
+                            isAdmin = (Test-IsAdmin)
+                        }
+                    }
+                    "get_privilege_info" {
+                        $response.data = @{
+                            isAdmin = (Test-IsAdmin)
+                            userName = [System.Environment]::UserName
+                            userDomain = [System.Environment]::UserDomainName
+                        }
+                    }
+                    "sys_elevate_app" {
+                        try {
+                            $appScript = Join-Path $script:AppRoot "app.ps1"
+                            Start-Process powershell.exe -ArgumentList "-STA -NoProfile -ExecutionPolicy Bypass -File `"$appScript`"" -Verb RunAs
+                            $response.data = @{ success = $true; message = "Launching new elevated administrator instance..." }
+                            $t = New-Object System.Windows.Forms.Timer
+                            $t.Interval = 600
+                            $t.Add_Tick({
+                                $t.Stop()
+                                $form.Close()
+                            })
+                            $t.Start()
+                        }
+                        catch {
+                            $response.success = $false
+                            $response.error = if ($_.Exception.Message -match "cancel|canceled") { "User canceled administrator elevation prompt." } else { $_.Exception.Message }
+                        }
+                    }
+    
+                    # Network Tools (Base)
+                    "net_get_local_ports" {
+                        $response.data = Get-LocalPortList
+                    }
+                    "net_check_remote_port" {
+                        $hostName = [string]($payload.host)
+                        $ports = $payload.ports
+                        $timeout = if ($payload.timeoutMs) { [int]($payload.timeoutMs) } else { 1500 }
+                        $response.data = Test-RemotePorts -hostName $hostName -ports $ports -timeoutMs $timeout
+                    }
+                    "net_ping" {
+                        $targetHost = [string]($payload.host)
+                        $count = if ($payload.count) { [int]($payload.count) } else { 4 }
+                        $timeout = if ($payload.timeoutMs) { [int]($payload.timeoutMs) } else { 2000 }
+                        $response.data = Test-PingAndDns -targetHost $targetHost -count $count -timeoutMs $timeout
+                    }
+                    "net_http_request" {
+                        $method = [string]($payload.method)
+                        $url = [string]($payload.url)
+                        $headers = $payload.headers
+                        $body = [string]($payload.body)
+                        $timeoutSec = if ($payload.timeoutSec) { [int]($payload.timeoutSec) } else { 30 }
+                        $res = Invoke-CustomHttpRequest -method $method -url $url -headers $headers -body $body -timeoutSec $timeoutSec
+                        if ($res.success) {
+                            $response.data = $res
+                        } else {
+                            $response.success = $false
+                            $response.data = $res
+                            $response.error = $res.error
+                        }
+                    }
+    
+                    # 1. NetAdapter & DNS
+                    "net_get_adapters" {
+                        $response.data = Get-NetAdapterAndDns
+                    }
+                    "net_set_adapter_dns" {
+                        $ifAlias = [string]($payload.interfaceAlias)
+                        $dnsArr = @($payload.dnsServers)
+                        $isDhcp = [bool]($payload.isDhcp)
+                        $res = Set-NetAdapterDnsConfig -interfaceAlias $ifAlias -dnsServers $dnsArr -isDhcp $isDhcp
+                        if ($res.success) { $response.data = $res } else { $response.success = $false; $response.error = $res.error }
+                    }
+                    "net_set_adapter_ip" {
+                        $ifAlias = [string]($payload.interfaceAlias)
+                        $isDhcp = [bool]($payload.isDhcp)
+                        $ip = [string]($payload.ip)
+                        $prefixLen = if ($payload.prefixLength) { [int]($payload.prefixLength) } else { 24 }
+                        $gw = [string]($payload.gateway)
+                        $res = Set-NetAdapterIpConfig -interfaceAlias $ifAlias -isDhcp $isDhcp -ip $ip -prefixLength $prefixLen -gateway $gw
+                        if ($res.success) { $response.data = $res } else { $response.success = $false; $response.error = $res.error }
+                    }
+                    "net_flush_dns_winsock" {
+                        $response.data = Invoke-FlushDnsAndWinsock
+                    }
+    
+                    # 2. LAN Scanner
+                    "net_scan_lan" {
+                        $subnet = [string]($payload.subnet)
+                        $res = Invoke-LanScanner -subnetBase $subnet
+                        if ($res.success) { $response.data = $res } else { $response.success = $false; $response.error = $res.error }
+                    }
+    
+                    # 3. SSL/TLS Inspector
+                    "net_check_ssl" {
+                        $hostName = [string]($payload.host)
+                        $port = if ($payload.port) { [int]($payload.port) } else { 443 }
+                        $timeout = if ($payload.timeoutMs) { [int]($payload.timeoutMs) } else { 5000 }
+                        $res = Get-SslCertificateDetails -hostName $hostName -port $port -timeoutMs $timeout
+                        if ($res.success) { $response.data = $res } else { $response.success = $false; $response.error = $res.error }
+                    }
+    
+                    # 4. Proxy Manager
+                    "net_get_proxy" {
+                        $res = Get-SystemProxySettings
+                        if ($res.success) { $response.data = $res } else { $response.success = $false; $response.error = $res.error }
+                    }
+                    "net_set_proxy" {
+                        $enable = [bool]($payload.enabled)
+                        $srv = [string]($payload.server)
+                        $override = [string]($payload.override)
+                        $pac = [string]($payload.pacUrl)
+                        $res = Set-SystemProxySettings -enabled $enable -server $srv -override $override -pacUrl $pac
+                        if ($res.success) { $response.data = $res } else { $response.success = $false; $response.error = $res.error }
+                    }
+    
+                    # 5. Mini HTTP File Server
+                    "net_start_file_server" {
+                        $folderPath = [string]($payload.path)
+                        $port = if ($payload.port) { [int]($payload.port) } else { 8000 }
+                        $res = Start-HttpFileServer -folderPath $folderPath -port $port
+                        if ($res.success) { $response.data = $res } else { $response.success = $false; $response.error = $res.error }
+                    }
+                    "net_stop_file_server" {
+                        $res = Stop-HttpFileServer
+                        if ($res.success) { $response.data = $res } else { $response.success = $false; $response.error = $res.error }
+                    }
+                    "net_get_file_server_status" {
+                        $response.data = Get-HttpFileServerStatus
+                    }
+    
+                    # 6. Route & Traceroute
+                    "net_get_route_table" {
+                        $response.data = Get-SystemRouteList
+                    }
+                    "net_trace_route" {
+                        $targetHost = [string]($payload.host)
+                        $maxHops = if ($payload.maxHops) { [int]($payload.maxHops) } else { 20 }
+                        $timeout = if ($payload.timeoutMs) { [int]($payload.timeoutMs) } else { 1500 }
+                        $response.data = Invoke-TraceRouteAction -targetHost $targetHost -maxHops $maxHops -timeoutMs $timeout
+                    }
+    
+                    # Base System Tools
+                    "sys_get_env_vars" {
+                        $response.data = Get-EnvVarList
+                    }
+                    "sys_set_env_var" {
+                        $name = [string]($payload.name)
+                        $value = [string]($payload.value)
+                        $scope = [string]($payload.scope)
+                        $res = Set-EnvVar -name $name -value $value -scope $scope
+                        if (-not $res.success) { $response.success = $false; $response.error = $res.error }
+                    }
+                    "sys_delete_env_var" {
+                        $name = [string]($payload.name)
+                        $scope = [string]($payload.scope)
+                        $res = Delete-EnvVar -name $name -scope $scope
+                        if (-not $res.success) { $response.success = $false; $response.error = $res.error }
+                    }
+                    "sys_get_processes" {
+                        $response.data = Get-ProcessList
+                    }
+                    "sys_kill_process" {
+                        $pidToKill = [int]($payload.pid)
+                        $res = Kill-ProcessById -pid $pidToKill
+                        if ($res.success) { $response.data = $res } else { $response.success = $false; $response.error = $res.error }
+                    }
+                    "sys_get_hosts" {
+                        $res = Get-HostsInfo
+                        if ($res.success) { $response.data = $res } else { $response.success = $false; $response.error = $res.error }
+                    }
+                    "sys_save_hosts" {
+                        $content = [string]($payload.content)
+                        $res = Save-HostsInfo -content $content
+                        if ($res.success) { $response.data = $res } else { $response.success = $false; $response.error = $res.error }
+                    }
+    
+                    # 7. Windows Services
+                    "sys_get_services" {
+                        $response.data = Get-WinServiceList
+                    }
+                    "sys_set_service_state" {
+                        $name = [string]($payload.name)
+                        $svcAction = [string]($payload.action)
+                        $res = Set-WinServiceStatus -serviceName $name -action $svcAction
+                        if ($res.success) { $response.data = $res } else { $response.success = $false; $response.error = $res.error }
+                    }
+                    "sys_set_service_start_type" {
+                        $name = [string]($payload.name)
+                        $startType = [string]($payload.startType)
+                        $res = Set-WinServiceStartMode -serviceName $name -startType $startType
+                        if ($res.success) { $response.data = $res } else { $response.success = $false; $response.error = $res.error }
+                    }
+    
+                    # 8. Startup Items Auditor
+                    "sys_get_startup_items" {
+                        $response.data = Get-AllStartupItems
+                    }
+                    "sys_remove_startup_item" {
+                        $id = [string]($payload.id)
+                        $locType = [string]($payload.locationType)
+                        $locPath = [string]($payload.locationPath)
+                        $name = [string]($payload.name)
+                        $res = Remove-StartupItemEntry -id $id -locationType $locType -locationPath $locPath -name $name
+                        if ($res.success) { $response.data = $res } else { $response.success = $false; $response.error = $res.error }
+                    }
+    
+                    # 9. File Lock Hunter
+                    "sys_get_file_locks" {
+                        $path = [string]($payload.path)
+                        $res = Get-FileLockingDetails -path $path
+                        if ($res.success) { $response.data = $res } else { $response.success = $false; $response.error = $res.error }
+                    }
+    
+                    # 10. Hardware Specs & Health
+                    "sys_get_hardware_specs" {
+                        $res = Get-ComprehensiveSpecs
+                        if ($res.success) { $response.data = $res } else { $response.success = $false; $response.error = $res.error }
+                    }
+    
+                    # 11. System Shortcuts Launcher
+                    "sys_launch_shortcut" {
+                        $key = [string]($payload.toolKey)
+                        $res = Launch-SysUtility -toolKey $key
+                        if ($res.success) { $response.data = $res } else { $response.success = $false; $response.error = $res.error }
+                    }
+    
+                    default {
+                        $response.success = $false
+                        $response.error = "Unknown action: $action"
+                    }
+                }
+    
+                $resJson = ConvertTo-Json -InputObject $response -Compress -Depth 10
+                $s.PostWebMessageAsJson($resJson)
+            }
+            catch {
+                $errResponse = @{
+                    id = if ($request) { $request.id } else { $null }
+                    action = if ($request) { $request.action } else { "unknown" }
+                    success = $false
+                    error = $_.Exception.Message
+                }
+                $errJson = ConvertTo-Json -InputObject $errResponse -Compress -Depth 10
+                $s.PostWebMessageAsJson($errJson)
+            }
+        })
+    
+        $sender.CoreWebView2.Navigate($sender.Tag.AbsoluteUri)
+    })
+}
