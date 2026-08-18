@@ -306,6 +306,47 @@ function Register-AppWebViewHandlers($webView) {
                         $res = Launch-SysUtility -toolKey $key
                         if ($res.success) { $response.data = $res } else { $response.success = $false; $response.error = $res.error }
                     }
+
+                    # 12. Scheduled Tasks Center
+                    "sys_get_scheduled_tasks" {
+                        $response.data = Get-ToolboxScheduledTasks
+                    }
+                    "sys_create_scheduled_task" {
+                        $res = New-ToolboxScheduledTask `
+                            -name ([string]$payload.name) `
+                            -actionKey ([string]$payload.taskAction) `
+                            -scheduleType ([string]$payload.scheduleType) `
+                            -runAt ([string]$payload.runAt) `
+                            -programPath ([string]$payload.programPath) `
+                            -arguments ([string]$payload.arguments) `
+                            -workingDirectory ([string]$payload.workingDirectory)
+                        if ($res.success) { $response.data = $res } else { $response.success = $false; $response.error = $res.error }
+                    }
+                    "sys_set_scheduled_task_state" {
+                        $res = Set-ToolboxScheduledTaskState -taskName ([string]$payload.id) -enabled ([bool]$payload.enabled)
+                        if ($res.success) { $response.data = $res } else { $response.success = $false; $response.error = $res.error }
+                    }
+                    "sys_remove_scheduled_task" {
+                        $res = Remove-ToolboxScheduledTask -taskName ([string]$payload.id)
+                        if ($res.success) { $response.data = $res } else { $response.success = $false; $response.error = $res.error }
+                    }
+
+                    # 13. Context Menu Manager
+                    "sys_get_context_menu_items" {
+                        $response.data = Get-ContextMenuItems
+                    }
+                    "sys_set_context_menu_item_state" {
+                        $res = Set-ContextMenuItemState `
+                            -type ([string]$payload.type) `
+                            -registryPath ([string]$payload.registryPath) `
+                            -clsid ([string]$payload.clsid) `
+                            -enabled ([bool]$payload.enabled)
+                        if ($res.success) { $response.data = $res } else { $response.success = $false; $response.error = $res.error }
+                    }
+                    "sys_open_context_menu_registry" {
+                        $res = Open-ContextMenuRegistryPath -registryPath ([string]$payload.registryPath)
+                        if ($res.success) { $response.data = $res } else { $response.success = $false; $response.error = $res.error }
+                    }
     
                     default {
                         $response.success = $false

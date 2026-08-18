@@ -425,6 +425,90 @@ const IPC = {
         case 'sys_launch_shortcut':
           resolve({ success: true, message: `已成功调起系统工具: ${payload.toolKey} (Mock)` });
           break;
+        case 'sys_get_scheduled_tasks': {
+          const saved = localStorage.getItem('mock_scheduled_tasks');
+          const defaults = [
+            { id: 'DevToolsBox_EveningLock_demo01', name: '下班后锁屏', action: 'lock', execute: 'rundll32.exe', arguments: 'user32.dll,LockWorkStation', scheduleType: 'daily', nextRun: '2026-08-18 22:30:00', lastRun: '2026-08-17 22:30:00', lastResult: 0, enabled: true, state: 'Ready' },
+            { id: 'DevToolsBox_Backup_demo02', name: '每晚备份项目', action: 'program', execute: 'C:\\Tools\\backup.ps1', arguments: '', scheduleType: 'daily', nextRun: '2026-08-19 01:00:00', lastRun: '', lastResult: 0, enabled: false, state: 'Disabled' }
+          ];
+          if (!saved) localStorage.setItem('mock_scheduled_tasks', JSON.stringify(defaults));
+          resolve(saved ? JSON.parse(saved) : defaults);
+          break;
+        }
+        case 'sys_create_scheduled_task': {
+          const tasks = JSON.parse(localStorage.getItem('mock_scheduled_tasks') || '[]');
+          const id = `DevToolsBox_${payload.taskAction}_${Date.now()}`;
+          const actionExecute = {
+            shutdown: 'shutdown.exe', restart: 'shutdown.exe', sleep: 'rundll32.exe', lock: 'rundll32.exe'
+          }[payload.taskAction] || payload.programPath;
+          tasks.push({
+            id,
+            name: payload.name,
+            action: payload.taskAction,
+            execute: actionExecute,
+            arguments: payload.arguments || '',
+            scheduleType: payload.scheduleType,
+            nextRun: payload.runAt,
+            lastRun: '',
+            lastResult: 0,
+            enabled: true,
+            state: 'Ready'
+          });
+          localStorage.setItem('mock_scheduled_tasks', JSON.stringify(tasks));
+          resolve({ success: true, id, message: '定时任务已创建 (Mock)' });
+          break;
+        }
+        case 'sys_set_scheduled_task_state': {
+          const tasks = JSON.parse(localStorage.getItem('mock_scheduled_tasks') || '[]');
+          tasks.forEach(task => {
+            if (task.id === payload.id) {
+              task.enabled = payload.enabled;
+              task.state = payload.enabled ? 'Ready' : 'Disabled';
+            }
+          });
+          localStorage.setItem('mock_scheduled_tasks', JSON.stringify(tasks));
+          resolve({ success: true, message: payload.enabled ? '任务已启用 (Mock)' : '任务已暂停 (Mock)' });
+          break;
+        }
+        case 'sys_remove_scheduled_task': {
+          const tasks = JSON.parse(localStorage.getItem('mock_scheduled_tasks') || '[]').filter(task => task.id !== payload.id);
+          localStorage.setItem('mock_scheduled_tasks', JSON.stringify(tasks));
+          resolve({ success: true, message: '任务已删除 (Mock)' });
+          break;
+        }
+        case 'sys_get_context_menu_items': {
+          const disabled = JSON.parse(localStorage.getItem('mock_context_disabled') || '[]');
+          const items = [
+            { id: 'verb|open-code', name: 'Open with Code', keyName: 'VSCode', type: 'verb', typeName: '命令菜单', target: 'folder', targetName: '文件夹', scope: 'User', command: '"C:\\Program Files\\Microsoft VS Code\\Code.exe" "%V"', registryPath: 'HKCU:\\Software\\Classes\\Directory\\shell\\VSCode', clsid: '', policyLocked: false },
+            { id: 'verb|terminal', name: '在终端中打开', keyName: 'WindowsTerminal', type: 'verb', typeName: '命令菜单', target: 'background', targetName: '目录背景', scope: 'Machine', command: 'wt.exe -d "%V"', registryPath: 'HKLM:\\Software\\Classes\\Directory\\Background\\shell\\WindowsTerminal', clsid: '', policyLocked: false },
+            { id: 'verb|scan', name: '使用 Microsoft Defender 扫描', keyName: 'WindowsDefender', type: 'verb', typeName: '命令菜单', target: 'file', targetName: '文件', scope: 'Machine', command: 'MpCmdRun.exe -Scan -ScanType 3 -File "%1"', registryPath: 'HKLM:\\Software\\Classes\\*\\shell\\WindowsDefender', clsid: '', policyLocked: false },
+            { id: 'handler|7zip', name: '7-Zip Shell Extension', keyName: '7-Zip', type: 'handler', typeName: '扩展处理器', target: 'file', targetName: '文件', scope: 'Machine', command: '{23170F69-40C1-278A-1000-000100020000}', registryPath: 'HKLM:\\Software\\Classes\\*\\shellex\\ContextMenuHandlers\\7-Zip', clsid: '{23170F69-40C1-278A-1000-000100020000}', policyLocked: false },
+            { id: 'handler|sharing', name: 'ModernSharing', keyName: 'ModernSharing', type: 'handler', typeName: '扩展处理器', target: 'folder', targetName: '文件夹', scope: 'Machine', command: '{E2BF9676-5F8F-435C-97EB-11607A5BEDF7}', registryPath: 'HKLM:\\Software\\Classes\\Directory\\shellex\\ContextMenuHandlers\\ModernSharing', clsid: '{E2BF9676-5F8F-435C-97EB-11607A5BEDF7}', policyLocked: false },
+            { id: 'verb|encrypt', name: '启用 BitLocker', keyName: 'manage-bde', type: 'verb', typeName: '命令菜单', target: 'drive', targetName: '磁盘', scope: 'Machine', command: 'manage-bde.exe', registryPath: 'HKLM:\\Software\\Classes\\Drive\\shell\\manage-bde', clsid: '', policyLocked: false }
+          ];
+          items.forEach(item => { item.enabled = !disabled.includes(item.id); });
+          resolve(items);
+          break;
+        }
+        case 'sys_set_context_menu_item_state': {
+          const items = [
+            ['verb', 'HKCU:\\Software\\Classes\\Directory\\shell\\VSCode', '', 'verb|open-code'],
+            ['verb', 'HKLM:\\Software\\Classes\\Directory\\Background\\shell\\WindowsTerminal', '', 'verb|terminal'],
+            ['verb', 'HKLM:\\Software\\Classes\\*\\shell\\WindowsDefender', '', 'verb|scan'],
+            ['handler', 'HKLM:\\Software\\Classes\\*\\shellex\\ContextMenuHandlers\\7-Zip', '{23170F69-40C1-278A-1000-000100020000}', 'handler|7zip'],
+            ['handler', 'HKLM:\\Software\\Classes\\Directory\\shellex\\ContextMenuHandlers\\ModernSharing', '{E2BF9676-5F8F-435C-97EB-11607A5BEDF7}', 'handler|sharing'],
+            ['verb', 'HKLM:\\Software\\Classes\\Drive\\shell\\manage-bde', '', 'verb|encrypt']
+          ];
+          const match = items.find(item => item[0] === payload.type && (item[1] === payload.registryPath || item[2] === payload.clsid));
+          let disabled = JSON.parse(localStorage.getItem('mock_context_disabled') || '[]');
+          if (match) disabled = payload.enabled ? disabled.filter(id => id !== match[3]) : [...new Set([...disabled, match[3]])];
+          localStorage.setItem('mock_context_disabled', JSON.stringify(disabled));
+          resolve({ success: true, restartRequired: true, message: `菜单项已${payload.enabled ? '启用' : '禁用'} (Mock)` });
+          break;
+        }
+        case 'sys_open_context_menu_registry':
+          resolve({ success: true });
+          break;
         case 'winget_get_status':
           resolve({ available: true, version: 'v1.29.280', error: null });
           break;

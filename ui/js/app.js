@@ -46,6 +46,8 @@ const ToolRegistry = {
     { id: 'file-lock-hunter', title: '文件占用与句柄解锁', category: 'system', categoryName: '系统运维', icon: 'unlock', desc: '基于 Windows Restart Manager 原生定位锁定文件的进程 PID 与窗口，支持一键结束', tags: ['系统', '进程', '文件', '解锁'] },
     { id: 'system-specs', title: '硬件规格与系统健康', category: 'system', categoryName: '系统运维', icon: 'gauge', desc: '仪表盘展示 CPU、内存插槽、磁盘容量、GPU 显卡及系统开机运行时间 (Uptime)', tags: ['系统', '硬件', 'CPU', '内存', '健康'] },
     { id: 'system-launcher', title: '系统管理入口与上帝模式', category: 'system', categoryName: '系统运维', icon: 'terminal', desc: '一键快捷调起组策略、注册表、设备管理器、网络连接、磁盘管理与上帝模式', tags: ['系统', '快捷', '上帝模式', 'MMC'] },
+    { id: 'scheduled-tasks', title: '定时任务中心', category: 'system', categoryName: '系统运维', icon: 'calendar-clock', desc: '定时关机、重启、睡眠、锁屏或运行程序，支持单次与每日计划', tags: ['系统', '定时', '计划任务', '自动化'] },
+    { id: 'context-menu-manager', title: '右键菜单管理器', category: 'system', categoryName: '系统运维', icon: 'mouse-pointer-click', desc: '扫描并启用或禁用文件、文件夹、桌面与磁盘右键菜单项目', tags: ['系统', '右键菜单', '注册表', '优化'] },
     { id: 'env-viewer', title: '系统环境变量管理', category: 'system', categoryName: '系统运维', icon: 'layers', desc: '查看、检索与快捷编辑 Windows 用户与系统 PATH 及环境变量', tags: ['系统', '环境变量', '运维'] },
     { id: 'process-viewer', title: '系统进程快速分析', category: 'system', categoryName: '系统运维', icon: 'cpu', desc: '基于 PowerShell 高性能获取系统进程内存、CPU 占用并支持一键终止', tags: ['系统', '进程', '运维'] },
     { id: 'hosts-editor', title: 'Hosts 快速切换器', category: 'system', categoryName: '系统运维', icon: 'server', desc: '快速读取与编辑系统 Hosts 映射规则，支持规则一键切换与备份', tags: ['系统', '网络', 'Hosts'] }
@@ -255,6 +257,12 @@ const ToolRegistry = {
         case 'system-launcher':
           SystemLauncherTool.render(mount);
           break;
+        case 'scheduled-tasks':
+          ScheduledTaskTool.render(mount);
+          break;
+        case 'context-menu-manager':
+          ContextMenuManagerTool.render(mount);
+          break;
         case 'env-viewer':
           EnvTool.render(mount);
           break;
@@ -391,6 +399,7 @@ const ToolRegistry = {
 // ==========================================
 const AppNavigation = {
   currentView: 'tools',
+  toolsScrollTop: 0,
 
   init() {
     const btnNavSettings = document.getElementById('btnNavSettings');
@@ -410,6 +419,10 @@ const AppNavigation = {
   },
 
   switchView(viewName) {
+    const appContent = document.querySelector('.app-content');
+    if (appContent && this.currentView === 'tools' && viewName !== 'tools') {
+      this.toolsScrollTop = appContent.scrollTop;
+    }
     this.currentView = viewName;
 
     const viewTools = document.getElementById('viewTools');
@@ -446,6 +459,10 @@ const AppNavigation = {
           if (activeBtn) activeBtn.classList.add('active');
         }
       }
+    }
+
+    if (appContent) {
+      appContent.scrollTop = viewName === 'tools' ? this.toolsScrollTop : 0;
     }
 
     if (window.lucide) lucide.createIcons();
