@@ -53,7 +53,9 @@ const IPC = {
       window.chrome.webview.postMessage({ id, action, payload });
 
       // Timeout safeguard
-      const timeoutMs = action === 'winget_package_action'
+      const timeoutMs = action === 'winget_batch_action'
+        ? Math.max(15 * 60 * 1000, Math.min(Number(payload.packageIds?.length || 0) * 3 * 60 * 1000, 2 * 60 * 60 * 1000))
+        : action === 'winget_package_action'
         ? 15 * 60 * 1000
         : (action.startsWith('winget_') || action.startsWith('cert_') || action === 'net_http_request' || action === 'net_ping' || action === 'net_check_remote_port' || action === 'net_trace_route' || action === 'net_scan_lan' || action === 'net_dns_deep_diagnostic' || action === 'net_intel_lookup' || action === 'net_get_portproxy_targets')
           ? 60000
@@ -746,6 +748,15 @@ const IPC = {
           break;
         case 'winget_package_action':
           resolve({ success: true, operation: payload.operation, packageId: payload.packageId || '', message: '操作已完成 (Mock)' });
+          break;
+        case 'winget_batch_action':
+          resolve({
+            operation: payload.operation,
+            total: (payload.packageIds || []).length,
+            succeeded: (payload.packageIds || []).length,
+            failed: 0,
+            results: (payload.packageIds || []).map(packageId => ({ success: true, packageId, error: null }))
+          });
           break;
 
         default:

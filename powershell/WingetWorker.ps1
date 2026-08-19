@@ -214,6 +214,47 @@ function Invoke-WingetPackageOperation([string]$operation, [string]$packageId = 
     return @{ success = $true; exitCode = $result.exitCode; output = $output; operation = $operation; packageId = $packageId }
 }
 
+function Invoke-WingetBatchOperation([string]$operation, [object[]]$packageIds) {
+    if ($operation -notin @("upgrade", "uninstall")) {
+        return @{ success = $false; error = "Unsupported batch operation." }
+    }
+
+    $uniqueIds = [System.Collections.Generic.List[string]]::new()
+    $seenIds = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+    foreach ($value in @($packageIds)) {
+        $packageId = ([string]$value).Trim()
+        if ([string]::IsNullOrWhiteSpace($packageId) -or $packageId.Length -gt 512 -or $packageId -match '[\x00-\x1f]') {
+            return @{ success = $false; error = "Invalid package ID in batch request." }
+        }
+        if ($seenIds.Add($packageId)) { $uniqueIds.Add($packageId) }
+    }
+
+    if ($uniqueIds.Count -eq 0 -or $uniqueIds.Count -gt 100) {
+        return @{ success = $false; error = "Batch request must contain 1 to 100 packages." }
+    }
+
+    $results = [System.Collections.Generic.List[object]]::new()
+    foreach ($packageId in $uniqueIds) {
+        $itemResult = Invoke-WingetPackageOperation -operation $operation -packageId $packageId
+        $results.Add([PSCustomObject]@{
+            success = [bool]$itemResult.success
+            packageId = $packageId
+            exitCode = $itemResult.exitCode
+            error = if ($itemResult.success) { $null } else { $itemResult.error }
+        })
+    }
+
+    $succeeded = @($results | Where-Object { $_.success }).Count
+    return @{
+        success = $true
+        operation = $operation
+        total = $results.Count
+        succeeded = $succeeded
+        failed = $results.Count - $succeeded
+        results = $results
+    }
+}
+
 function New-WorkerResponse([bool]$success, $data = $null, [string]$errorMessage = $null) {
     return [ordered]@{ success = $success; data = $data; error = $errorMessage }
 }
@@ -241,6 +282,11 @@ try {
         }
         "winget_package_action" {
             $result = Invoke-WingetPackageOperation -operation ([string]$payload.operation) -packageId ([string]$payload.packageId)
+            if ($result.success) { $response = New-WorkerResponse -success $true -data $result }
+            else { $response = New-WorkerResponse -success $false -errorMessage $result.error }
+        }
+        "winget_batch_action" {
+            $result = Invoke-WingetBatchOperation -operation ([string]$payload.operation) -packageIds @($payload.packageIds)
             if ($result.success) { $response = New-WorkerResponse -success $true -data $result }
             else { $response = New-WorkerResponse -success $false -errorMessage $result.error }
         }

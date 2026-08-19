@@ -8,6 +8,10 @@ const WingetManagerTool = {
   searchResults: [],
   status: null,
   busy: false,
+  selected: {
+    installed: new Set(),
+    updates: new Set()
+  },
 
   escape(value) {
     return String(value ?? '').replace(/[&<>"']/g, char => ({
@@ -21,6 +25,11 @@ const WingetManagerTool = {
     this.updates = [];
     this.searchResults = [];
     this.status = null;
+    this.busy = false;
+    this.selected = {
+      installed: new Set(),
+      updates: new Set()
+    };
 
     container.innerHTML = `
       <div class="tool-view-wrapper winget-panel">
@@ -64,6 +73,22 @@ const WingetManagerTool = {
           </div>
         </div>
 
+        <div class="winget-selection-bar" id="wingetSelectionBar">
+          <div class="winget-selection-summary">
+            <i data-lucide="list-checks"></i>
+            <span>已选择 <strong id="wingetSelectedCount">0</strong> 项</span>
+            <button class="btn btn-link btn-sm d-none" id="btnWingetClearSelection">清除选择</button>
+          </div>
+          <div class="winget-selection-actions">
+            <button class="btn btn-primary btn-sm d-none" id="btnWingetUpgradeSelected" disabled>
+              <i data-lucide="arrow-up" class="lucide-sm"></i> 升级所选
+            </button>
+            <button class="btn btn-outline-danger btn-sm" id="btnWingetUninstallSelected" disabled>
+              <i data-lucide="trash-2" class="lucide-sm"></i> 卸载所选
+            </button>
+          </div>
+        </div>
+
         <div class="winget-operation-bar d-none" id="wingetOperationBar">
           <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
           <span id="wingetOperationText">正在执行...</span>
@@ -101,7 +126,10 @@ const WingetManagerTool = {
     const searchButton = container.querySelector('#btnWingetSearch');
     const refreshButton = container.querySelector('#btnWingetRefresh');
     const upgradeAllButton = container.querySelector('#btnWingetUpgradeAll');
-    const tableBody = container.querySelector('#wingetTableBody');
+    const upgradeSelectedButton = container.querySelector('#btnWingetUpgradeSelected');
+    const uninstallSelectedButton = container.querySelector('#btnWingetUninstallSelected');
+    const clearSelectionButton = container.querySelector('#btnWingetClearSelection');
+    const table = container.querySelector('.winget-table');
 
     if (input) {
       input.oninput = () => {
@@ -114,11 +142,21 @@ const WingetManagerTool = {
     if (searchButton) searchButton.onclick = () => this.searchPackages();
     if (refreshButton) refreshButton.onclick = () => this.refreshCurrent();
     if (upgradeAllButton) upgradeAllButton.onclick = () => this.runPackageAction('upgrade-all', '', '全部可更新软件');
-    if (tableBody) {
-      tableBody.onclick = event => {
+    if (upgradeSelectedButton) upgradeSelectedButton.onclick = () => this.runBatchAction('upgrade');
+    if (uninstallSelectedButton) uninstallSelectedButton.onclick = () => this.runBatchAction('uninstall');
+    if (clearSelectionButton) clearSelectionButton.onclick = () => this.clearSelection();
+    if (table) {
+      table.onclick = event => {
         const button = event.target.closest('[data-winget-action]');
         if (!button || this.busy) return;
         this.runPackageAction(button.dataset.wingetAction, button.dataset.packageId, button.dataset.packageName);
+      };
+      table.onchange = event => {
+        if (event.target.matches('[data-winget-select-all]')) {
+          this.toggleSelectAll(event.target.checked);
+        } else if (event.target.matches('[data-winget-select]')) {
+          this.togglePackageSelection(event.target.dataset.packageId, event.target.checked);
+        }
       };
     }
   },
@@ -133,6 +171,7 @@ const WingetManagerTool = {
       ]);
       this.installed = installedResult.items || [];
       this.updates = updatesResult.items || [];
+      this.reconcileSelections();
       this.updateSummary();
       this.renderTable();
     } catch (error) {
@@ -154,6 +193,7 @@ const WingetManagerTool = {
     if (updateTabCount) updateTabCount.textContent = this.updates.length;
     if (upgradeAll) upgradeAll.disabled = this.busy || this.updates.length === 0;
     if (lastRefresh) lastRefresh.textContent = `更新于 ${new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}`;
+    this.updateSelectionBar();
   },
 
   switchTab(tab) {
@@ -187,24 +227,31 @@ const WingetManagerTool = {
 
     const isSearch = this.activeTab === 'search';
     const items = this.getVisibleItems();
+    const selectionColumn = isSearch ? '' : `
+      <th class="winget-select-cell">
+        <input class="form-check-input" type="checkbox" data-winget-select-all aria-label="选择当前列表">
+      </th>`;
     head.innerHTML = `<tr>
+      ${selectionColumn}
       <th>软件包</th>
       <th>包 ID</th>
       <th style="width:130px;">${isSearch ? '最新版本' : '当前版本'}</th>
       <th style="width:130px;">${isSearch ? '匹配信息' : '可用版本'}</th>
       <th style="width:92px;">来源</th>
-      <th style="width:112px;">操作</th>
+      <th style="width:${isSearch ? '112px' : '184px'};">操作</th>
     </tr>`;
 
     if (items.length === 0) {
       const emptyText = isSearch ? '输入关键词搜索 winget 软件源' : this.activeTab === 'updates' ? '当前没有可用更新' : '没有匹配的软件包';
       const emptyIcon = isSearch ? 'package-search' : this.activeTab === 'updates' ? 'badge-check' : 'package-x';
-      body.innerHTML = `<tr><td colspan="6"><div class="winget-empty-state"><i data-lucide="${emptyIcon}"></i><span>${emptyText}</span></div></td></tr>`;
+      body.innerHTML = `<tr><td colspan="${isSearch ? 6 : 7}"><div class="winget-empty-state"><i data-lucide="${emptyIcon}"></i><span>${emptyText}</span></div></td></tr>`;
     } else {
       body.innerHTML = items.map(item => this.renderRow(item, isSearch)).join('');
     }
 
     if (resultCount) resultCount.textContent = `${items.length} 项`;
+    this.syncSelectionControls();
+    this.updateSelectionBar();
     if (window.lucide) lucide.createIcons({ root: body });
   },
 
@@ -219,13 +266,15 @@ const WingetManagerTool = {
 
     if (isSearch) {
       actionHtml = `<button class="btn btn-primary btn-sm winget-action-btn" data-winget-action="install" data-package-id="${id}" data-package-name="${name}"><i data-lucide="download"></i>安装</button>`;
-    } else if (item.availableVersion) {
-      actionHtml = `<button class="btn btn-primary btn-sm winget-action-btn" data-winget-action="upgrade" data-package-id="${id}" data-package-name="${name}"><i data-lucide="arrow-up"></i>升级</button>`;
     } else {
-      actionHtml = `<button class="btn btn-outline-danger btn-sm winget-action-btn" data-winget-action="uninstall" data-package-id="${id}" data-package-name="${name}"><i data-lucide="trash-2"></i>卸载</button>`;
+      actionHtml = `<div class="winget-row-actions">
+        ${item.availableVersion ? `<button class="btn btn-primary btn-sm winget-action-btn" data-winget-action="upgrade" data-package-id="${id}" data-package-name="${name}"><i data-lucide="arrow-up"></i>升级</button>` : ''}
+        <button class="btn btn-outline-danger btn-sm winget-action-btn" data-winget-action="uninstall" data-package-id="${id}" data-package-name="${name}"><i data-lucide="trash-2"></i>卸载</button>
+      </div>`;
     }
 
     return `<tr>
+      ${isSearch ? '' : `<td class="winget-select-cell"><input class="form-check-input" type="checkbox" data-winget-select data-package-id="${id}" aria-label="选择 ${name}"></td>`}
       <td><div class="winget-package-name" title="${name}">${name}</div></td>
       <td><code class="winget-package-id" title="${id}">${id}</code></td>
       <td class="font-mono">${currentVersion}</td>
@@ -233,6 +282,82 @@ const WingetManagerTool = {
       <td><span class="winget-source-badge">${source}</span></td>
       <td>${actionHtml}</td>
     </tr>`;
+  },
+
+  getSelectedSet() {
+    return this.selected[this.activeTab] || new Set();
+  },
+
+  togglePackageSelection(packageId, checked) {
+    const selected = this.getSelectedSet();
+    if (checked) selected.add(packageId);
+    else selected.delete(packageId);
+    this.syncSelectionControls();
+    this.updateSelectionBar();
+  },
+
+  toggleSelectAll(checked) {
+    const selected = this.getSelectedSet();
+    this.getVisibleItems().forEach(item => {
+      if (checked) selected.add(item.id);
+      else selected.delete(item.id);
+    });
+    this.syncSelectionControls();
+    this.updateSelectionBar();
+  },
+
+  clearSelection(tab = this.activeTab) {
+    if (this.selected[tab]) this.selected[tab].clear();
+    this.syncSelectionControls();
+    this.updateSelectionBar();
+  },
+
+  reconcileSelections() {
+    const validIds = {
+      installed: new Set(this.installed.map(item => item.id)),
+      updates: new Set(this.updates.map(item => item.id))
+    };
+    Object.keys(validIds).forEach(tab => {
+      this.selected[tab].forEach(packageId => {
+        if (!validIds[tab].has(packageId)) this.selected[tab].delete(packageId);
+      });
+    });
+  },
+
+  syncSelectionControls() {
+    if (this.activeTab === 'search') return;
+    const selected = this.getSelectedSet();
+    const visibleIds = this.getVisibleItems().map(item => item.id);
+    document.querySelectorAll('[data-winget-select]').forEach(checkbox => {
+      checkbox.checked = selected.has(checkbox.dataset.packageId);
+      checkbox.disabled = this.busy;
+    });
+    const selectAll = document.querySelector('[data-winget-select-all]');
+    if (selectAll) {
+      const selectedVisibleCount = visibleIds.filter(id => selected.has(id)).length;
+      selectAll.checked = visibleIds.length > 0 && selectedVisibleCount === visibleIds.length;
+      selectAll.indeterminate = selectedVisibleCount > 0 && selectedVisibleCount < visibleIds.length;
+      selectAll.disabled = this.busy || visibleIds.length === 0;
+    }
+  },
+
+  updateSelectionBar() {
+    const bar = document.getElementById('wingetSelectionBar');
+    const count = document.getElementById('wingetSelectedCount');
+    const clearButton = document.getElementById('btnWingetClearSelection');
+    const upgradeButton = document.getElementById('btnWingetUpgradeSelected');
+    const uninstallButton = document.getElementById('btnWingetUninstallSelected');
+    const isSelectable = this.activeTab !== 'search';
+    const selectedCount = isSelectable ? this.getSelectedSet().size : 0;
+
+    if (bar) bar.classList.toggle('d-none', !isSelectable);
+    if (count) count.textContent = selectedCount;
+    if (clearButton) clearButton.classList.toggle('d-none', selectedCount === 0);
+    if (upgradeButton) {
+      upgradeButton.classList.toggle('d-none', this.activeTab !== 'updates');
+      upgradeButton.disabled = this.busy || selectedCount === 0;
+    }
+    if (uninstallButton) uninstallButton.disabled = this.busy || selectedCount === 0;
   },
 
   async searchPackages() {
@@ -273,6 +398,7 @@ const WingetManagerTool = {
       ]);
       this.installed = installedResult.items || [];
       this.updates = updatesResult.items || [];
+      this.reconcileSelections();
       this.updateSummary();
       this.renderTable();
     } catch (error) {
@@ -304,6 +430,44 @@ const WingetManagerTool = {
     }
   },
 
+  async runBatchAction(operation) {
+    if (this.busy || this.activeTab === 'search') return;
+    const selected = this.getSelectedSet();
+    const source = this.activeTab === 'updates' ? this.updates : this.installed;
+    const packages = source.filter(item => selected.has(item.id));
+    if (packages.length === 0) return;
+
+    const actionName = operation === 'upgrade' ? '升级' : '卸载';
+    if (!confirm(`确定要${actionName}所选的 ${packages.length} 个软件包吗？`)) return;
+
+    this.setBusy(true, `正在批量${actionName} ${packages.length} 个软件包`);
+    await new Promise(resolve => requestAnimationFrame(resolve));
+    try {
+      const result = await IPC.send('winget_batch_action', {
+        operation,
+        packageIds: packages.map(item => item.id)
+      });
+      const succeeded = Number(result.succeeded || 0);
+      const failed = Number(result.failed || 0);
+      if (failed > 0) {
+        const failedNames = (result.results || []).filter(item => !item.success).map(item => item.packageId).slice(0, 3).join('、');
+        Toast.show(`批量${actionName}完成：成功 ${succeeded} 项，失败 ${failed} 项${failedNames ? `（${failedNames}）` : ''}`, 'warning', 7000);
+      } else {
+        Toast.show(`已成功${actionName} ${succeeded} 个软件包`, 'success', 3600);
+      }
+      this.clearSelection();
+      try {
+        await this.reloadPackageLists();
+      } catch (refreshError) {
+        Toast.show(`操作已完成，但列表刷新失败: ${refreshError.message}`, 'warning', 5000);
+      }
+    } catch (error) {
+      Toast.show(`批量${actionName}失败: ${error.message}`, 'error', 6000);
+    } finally {
+      this.setBusy(false);
+    }
+  },
+
   async reloadPackageLists() {
     const [installedResult, updatesResult] = await Promise.all([
       IPC.send('winget_get_packages', { mode: 'installed' }),
@@ -311,6 +475,7 @@ const WingetManagerTool = {
     ]);
     this.installed = installedResult.items || [];
     this.updates = updatesResult.items || [];
+    this.reconcileSelections();
     this.updateSummary();
     this.renderTable();
   },
@@ -326,19 +491,20 @@ const WingetManagerTool = {
     if (refresh) refresh.disabled = isBusy;
     if (search) search.disabled = isBusy;
     document.querySelectorAll('[data-winget-action]').forEach(button => button.disabled = isBusy);
+    this.syncSelectionControls();
     this.updateSummary();
   },
 
   showTableLoading(message) {
     const body = document.getElementById('wingetTableBody');
-    if (body) body.innerHTML = `<tr><td colspan="6" class="text-center text-muted py-5"><span class="spinner-border spinner-border-sm text-primary me-2"></span>${this.escape(message)}</td></tr>`;
+    if (body) body.innerHTML = `<tr><td colspan="7" class="text-center text-muted py-5"><span class="spinner-border spinner-border-sm text-primary me-2"></span>${this.escape(message)}</td></tr>`;
   },
 
   showLoadError(message) {
     const body = document.getElementById('wingetTableBody');
     const version = document.getElementById('wingetVersion');
     if (version && !this.status?.available) version.textContent = '不可用';
-    if (body) body.innerHTML = `<tr><td colspan="6"><div class="winget-empty-state error"><i data-lucide="triangle-alert"></i><span>${this.escape(message)}</span></div></td></tr>`;
+    if (body) body.innerHTML = `<tr><td colspan="7"><div class="winget-empty-state error"><i data-lucide="triangle-alert"></i><span>${this.escape(message)}</span></div></td></tr>`;
     if (window.lucide) lucide.createIcons({ root: body });
   }
 };

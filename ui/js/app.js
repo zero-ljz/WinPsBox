@@ -41,7 +41,7 @@ const ToolRegistry = {
 
     // System tools (Fully implemented)
     { id: 'service-manager', title: 'Windows 服务管理器', category: 'system', categoryName: '系统运维', icon: 'sliders', desc: '检索所有 Windows 系统服务，支持一键启动/停止/重启与修改自启动模式', tags: ['系统', '服务', '运维', 'Windows'] },
-    { id: 'winget-manager', title: 'WinGet 软件包管理', category: 'system', categoryName: '系统运维', icon: 'package-open', desc: '集中查看已安装软件与可用更新，支持搜索、安装、升级、卸载及批量更新', tags: ['系统', '软件', 'WinGet', '更新'] },
+    { id: 'winget-manager', title: 'WinGet 软件包管理', category: 'system', categoryName: '系统运维', icon: 'package-open', desc: '集中查看已安装软件与可用更新，支持搜索、安装、升级、卸载及批量升级和卸载', tags: ['系统', '软件', 'WinGet', '更新'] },
     { id: 'file-lock-hunter', title: '文件占用与句柄解锁', category: 'system', categoryName: '系统运维', icon: 'unlock', desc: '基于 Windows Restart Manager 原生定位锁定文件的进程 PID 与窗口，支持一键结束', tags: ['系统', '进程', '文件', '解锁'] },
     { id: 'scheduled-tasks', title: '定时任务中心', category: 'system', categoryName: '系统运维', icon: 'calendar-clock', desc: '定时关机、重启、睡眠、锁屏或运行程序，支持单次与每日计划', tags: ['系统', '定时', '计划任务', '自动化'] },
     { id: 'context-menu-manager', title: '右键菜单管理器', category: 'system', categoryName: '系统运维', icon: 'mouse-pointer-click', desc: '扫描并启用或禁用文件、文件夹、桌面与磁盘右键菜单项目', tags: ['系统', '右键菜单', '注册表', '优化'] },
