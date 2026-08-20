@@ -1,4 +1,4 @@
-# Native system tray integration and quick actions.
+﻿# Native system tray integration and quick actions.
 $script:AllowAppExit = $false
 $script:TrayHintShown = $false
 $script:MinimizeToTray = $true

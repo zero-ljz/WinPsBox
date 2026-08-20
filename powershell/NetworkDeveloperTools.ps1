@@ -1,4 +1,4 @@
-# Developer certificate, DNS diagnostics, and network intelligence helpers.
+﻿# Developer certificate, DNS diagnostics, and network intelligence helpers.
 
 $script:LocalDevCaSubject = "CN=WinPsBox Local Root CA"
 $script:LocalDevCaFriendlyName = "WinPsBox Local Root CA"

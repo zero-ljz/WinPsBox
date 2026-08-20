@@ -1,4 +1,4 @@
-# ----------------- System & Privilege Functions -----------------
+﻿# ----------------- System & Privilege Functions -----------------
 function Test-IsAdmin {
     try {
         $currentPrincipal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
