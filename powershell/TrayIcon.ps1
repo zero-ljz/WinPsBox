@@ -271,7 +271,7 @@ function Initialize-AppTray {
 
     $script:TrayIcon = New-Object System.Windows.Forms.NotifyIcon
     $script:TrayIcon.Icon = $script:AppIcon
-    $script:TrayIcon.Text = "WinPsBox - Windows 开发运维工作台"
+    $script:TrayIcon.Text = "WinPsBox - 开发者与系统管理员工具箱"
     $script:TrayIcon.ContextMenuStrip = $script:TrayMenu
     $script:TrayIcon.Visible = $true
     $script:TrayIcon.Add_DoubleClick({ Show-AppWindow })

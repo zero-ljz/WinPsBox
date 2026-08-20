@@ -30,7 +30,7 @@ Add-Type -Path (Join-Path $libPath "Microsoft.Web.WebView2.WinForms.dll")
 
 # ----------------- Main Window -----------------
 $form = New-Object System.Windows.Forms.Form
-$form.Text = "WinPsBox - Windows 开发运维工作台"
+$form.Text = "WinPsBox - 开发者与系统管理员工具箱"
 $form.Width = 1180
 $form.Height = 780
 $form.MinimumSize = New-Object System.Drawing.Size(900, 600)
