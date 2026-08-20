@@ -1,4 +1,4 @@
-﻿Add-Type -AssemblyName System.Windows.Forms
+Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
 $StartMinimized = $args -contains "--StartMinimized"
@@ -30,7 +30,7 @@ Add-Type -Path (Join-Path $libPath "Microsoft.Web.WebView2.WinForms.dll")
 
 # ----------------- Main Window -----------------
 $form = New-Object System.Windows.Forms.Form
-$form.Text = "DevTools Box - Toolbox"
+$form.Text = "WinPsBox - Windows 开发运维工作台"
 $form.Width = 1180
 $form.Height = 780
 $form.MinimumSize = New-Object System.Drawing.Size(900, 600)

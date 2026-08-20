@@ -58,7 +58,7 @@ const LocalCertificateTool = {
               <div class="cert-ca-identity">
                 <div class="cert-ca-seal"><i data-lucide="landmark"></i></div>
                 <div>
-                  <strong>DevTools Box Local Root CA</strong>
+                  <strong>WinPsBox Local Root CA</strong>
                   <span>RSA 4096 · SHA-256 · 10 年有效期</span>
                 </div>
               </div>

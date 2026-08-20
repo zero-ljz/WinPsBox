@@ -1,7 +1,7 @@
 # Developer certificate, DNS diagnostics, and network intelligence helpers.
 
-$script:LocalDevCaSubject = "CN=DevTools Box Local Root CA"
-$script:LocalDevCaFriendlyName = "DevTools Box Local Root CA"
+$script:LocalDevCaSubject = "CN=WinPsBox Local Root CA"
+$script:LocalDevCaFriendlyName = "WinPsBox Local Root CA"
 $script:LocalCertificateRoot = Join-Path $script:AppRoot "data\certificates"
 
 function Initialize-LocalCertificateDirectory {
@@ -178,7 +178,7 @@ function New-LocalDevServerCertificate([string]$commonName, $sanEntries, [int]$v
         $certificate = New-SelfSignedCertificate `
             -Type Custom `
             -Subject "CN=$commonName" `
-            -FriendlyName "DevTools Box - $commonName" `
+            -FriendlyName "WinPsBox - $commonName" `
             -Signer $ca `
             -KeyAlgorithm RSA `
             -KeyLength 2048 `
@@ -476,7 +476,7 @@ function Invoke-DohProviderComparison([string]$name, [string]$recordType = "A") 
     foreach ($provider in $providers) {
         $watch = [System.Diagnostics.Stopwatch]::StartNew()
         try {
-            $response = Invoke-RestMethod -Uri $provider.url -Headers @{ Accept = "application/dns-json"; "User-Agent" = "DevToolsBox/1.0" } -TimeoutSec 8 -ErrorAction Stop
+            $response = Invoke-RestMethod -Uri $provider.url -Headers @{ Accept = "application/dns-json"; "User-Agent" = "WinPsBox/1.0" } -TimeoutSec 8 -ErrorAction Stop
             $watch.Stop()
             $answers = @($response.Answer | ForEach-Object {
                 [PSCustomObject]@{ name = [string]$_.name; type = (Get-DnsJsonTypeName ([int]$_.type)); ttl = [int64]$_.TTL; value = [string]$_.data }
@@ -592,7 +592,7 @@ function Get-IpClassification([System.Net.IPAddress]$ip, [int64]$asn, [string]$o
 }
 
 function Invoke-NetworkJsonRequest([string]$url) {
-    return Invoke-RestMethod -Uri $url -Headers @{ "User-Agent" = "DevToolsBox/1.0"; Accept = "application/json" } -TimeoutSec 12 -ErrorAction Stop
+    return Invoke-RestMethod -Uri $url -Headers @{ "User-Agent" = "WinPsBox/1.0"; Accept = "application/json" } -TimeoutSec 12 -ErrorAction Stop
 }
 
 function Get-NetworkIntelligence([string]$target) {

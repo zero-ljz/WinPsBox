@@ -1,5 +1,5 @@
 /**
- * DevTools Box - Lightweight Desktop Toolbox
+ * WinPsBox - Lightweight Desktop Toolbox
  * Modules: IPC Bridge, ThemeManager, ToolRegistry, Tool Workspace Renderers, SettingsManager, Toast
  */
 
@@ -187,20 +187,20 @@ const IPC = {
           resolve({
             computerName: 'DEV-WORKSTATION',
             sans: ['localhost', '127.0.0.1', '::1', 'dev-workstation', '192.168.1.108'],
-            outputDirectory: 'C:\\DevToolsBox\\data\\certificates'
+            outputDirectory: 'C:\\WinPsBox\\data\\certificates'
           });
           break;
         case 'cert_get_ca_status': {
           const exists = localStorage.getItem('mock_ca_exists') === 'true';
           resolve({
             exists,
-            subject: 'CN=DevTools Box Local Root CA',
+            subject: 'CN=WinPsBox Local Root CA',
             thumbprint: exists ? '8F42C1A07E54D56D2D408A925F97C40A21B90077' : '',
             validFrom: exists ? '2026-08-18 19:40:00' : '',
             validTo: exists ? '2036-08-18 19:40:00' : '',
             trustedCurrentUser: exists,
             trustedLocalMachine: false,
-            outputDirectory: 'C:\\DevToolsBox\\data\\certificates',
+            outputDirectory: 'C:\\WinPsBox\\data\\certificates',
             isAdmin: false
           });
           break;
@@ -210,17 +210,17 @@ const IPC = {
           resolve({
             success: true,
             trustScope: payload.trustScope,
-            cerPath: 'C:\\DevToolsBox\\data\\certificates\\devtools-box-local-root-ca.cer',
-            pemPath: 'C:\\DevToolsBox\\data\\certificates\\devtools-box-local-root-ca.pem',
+            cerPath: 'C:\\WinPsBox\\data\\certificates\\winpsbox-local-root-ca.cer',
+            pemPath: 'C:\\WinPsBox\\data\\certificates\\winpsbox-local-root-ca.pem',
             status: {
               exists: true,
-              subject: 'CN=DevTools Box Local Root CA',
+              subject: 'CN=WinPsBox Local Root CA',
               thumbprint: '8F42C1A07E54D56D2D408A925F97C40A21B90077',
               validFrom: '2026-08-18 19:40:00',
               validTo: '2036-08-18 19:40:00',
               trustedCurrentUser: payload.trustScope !== 'LocalMachine',
               trustedLocalMachine: payload.trustScope === 'LocalMachine',
-              outputDirectory: 'C:\\DevToolsBox\\data\\certificates',
+              outputDirectory: 'C:\\WinPsBox\\data\\certificates',
               isAdmin: false
             }
           });
@@ -228,12 +228,12 @@ const IPC = {
         }
         case 'cert_generate_server': {
           const commonName = payload.commonName || 'localhost';
-          const folder = `C:\\DevToolsBox\\data\\certificates\\${commonName}-20260818-194200`;
+          const folder = `C:\\WinPsBox\\data\\certificates\\${commonName}-20260818-194200`;
           resolve({
             success: true,
             commonName,
             thumbprint: '73F7B850B2A36C624E024FE4541EA68AE51ECF09',
-            issuer: 'CN=DevTools Box Local Root CA',
+            issuer: 'CN=WinPsBox Local Root CA',
             validFrom: '2026-08-18 19:42:00',
             validTo: '2027-09-20 19:42:00',
             sans: (payload.sans || []).map(value => ({ type: /^\d|:/.test(value) ? 'IP' : 'DNS', value })),
@@ -589,7 +589,7 @@ const IPC = {
             locked: true,
             lockCount: 1,
             processes: [
-              { pid: 3820, name: 'Code.exe', title: 'pwsh-webui-app1 - Visual Studio Code', path: 'C:\\Users\\User\\AppData\\Local\\Programs\\VSCode\\Code.exe', memoryMB: 320.5 }
+              { pid: 3820, name: 'Code.exe', title: 'WinPsBox - Visual Studio Code', path: 'C:\\Users\\User\\AppData\\Local\\Programs\\VSCode\\Code.exe', memoryMB: 320.5 }
             ]
           });
           break;
@@ -637,8 +637,8 @@ const IPC = {
         case 'sys_get_scheduled_tasks': {
           const saved = localStorage.getItem('mock_scheduled_tasks');
           const defaults = [
-            { id: 'DevToolsBox_EveningLock_demo01', name: '下班后锁屏', action: 'lock', execute: 'rundll32.exe', arguments: 'user32.dll,LockWorkStation', scheduleType: 'daily', nextRun: '2026-08-18 22:30:00', lastRun: '2026-08-17 22:30:00', lastResult: 0, enabled: true, state: 'Ready' },
-            { id: 'DevToolsBox_Backup_demo02', name: '每晚备份项目', action: 'program', execute: 'C:\\Tools\\backup.ps1', arguments: '', scheduleType: 'daily', nextRun: '2026-08-19 01:00:00', lastRun: '', lastResult: 0, enabled: false, state: 'Disabled' }
+            { id: 'WinPsBox_EveningLock_demo01', name: '下班后锁屏', action: 'lock', execute: 'rundll32.exe', arguments: 'user32.dll,LockWorkStation', scheduleType: 'daily', nextRun: '2026-08-18 22:30:00', lastRun: '2026-08-17 22:30:00', lastResult: 0, enabled: true, state: 'Ready' },
+            { id: 'WinPsBox_Backup_demo02', name: '每晚备份项目', action: 'program', execute: 'C:\\Tools\\backup.ps1', arguments: '', scheduleType: 'daily', nextRun: '2026-08-19 01:00:00', lastRun: '', lastResult: 0, enabled: false, state: 'Disabled' }
           ];
           if (!saved) localStorage.setItem('mock_scheduled_tasks', JSON.stringify(defaults));
           resolve(saved ? JSON.parse(saved) : defaults);
@@ -646,7 +646,7 @@ const IPC = {
         }
         case 'sys_create_scheduled_task': {
           const tasks = JSON.parse(localStorage.getItem('mock_scheduled_tasks') || '[]');
-          const id = `DevToolsBox_${payload.taskAction}_${Date.now()}`;
+          const id = `WinPsBox_${payload.taskAction}_${Date.now()}`;
           const actionExecute = {
             shutdown: 'shutdown.exe', restart: 'shutdown.exe', sleep: 'rundll32.exe', lock: 'rundll32.exe'
           }[payload.taskAction] || payload.programPath;

@@ -1,4 +1,4 @@
-﻿# ----------------- System & Privilege Functions -----------------
+# ----------------- System & Privilege Functions -----------------
 function Test-IsAdmin {
     try {
         $currentPrincipal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
@@ -590,14 +590,17 @@ function Launch-SysUtility([string]$toolKey) {
     }
 }
 
-# ----------------- 12. DevTools Box Scheduled Tasks -----------------
-$script:ToolboxTaskPrefix = "DevToolsBox_"
+# ----------------- 12. WinPsBox Scheduled Tasks -----------------
+$script:ToolboxTaskPrefix = "WinPsBox_"
 
 function Get-ToolboxScheduledTasks {
     $items = [System.Collections.Generic.List[PSCustomObject]]::new()
     try {
         $tasks = @(Get-ScheduledTask -TaskName "$($script:ToolboxTaskPrefix)*" -ErrorAction SilentlyContinue)
-        foreach ($task in $tasks) {
+        # Also include legacy DevToolsBox tasks if any exist
+        $legacyTasks = @(Get-ScheduledTask -TaskName "DevToolsBox_*" -ErrorAction SilentlyContinue)
+        $allTasks = @($tasks) + @($legacyTasks)
+        foreach ($task in $allTasks) {
             $info = Get-ScheduledTaskInfo -TaskName $task.TaskName -TaskPath $task.TaskPath -ErrorAction SilentlyContinue
             $taskAction = @($task.Actions)[0]
             $trigger = @($task.Triggers)[0]
@@ -616,9 +619,9 @@ function Get-ToolboxScheduledTasks {
             $scheduleType = if ($trigger.CimClass.CimClassName -eq "MSFT_TaskDailyTrigger") { "daily" } else { "once" }
             $nextRun = if ($info -and $info.NextRunTime -and $info.NextRunTime.Year -gt 1900) { $info.NextRunTime.ToString("yyyy-MM-dd HH:mm:ss") } else { "" }
             $lastRun = if ($info -and $info.LastRunTime -and $info.LastRunTime.Year -gt 1900) { $info.LastRunTime.ToString("yyyy-MM-dd HH:mm:ss") } else { "" }
-            $displayName = ($task.TaskName -replace "^$([regex]::Escape($script:ToolboxTaskPrefix))", "")
-            if ([string]$task.Description -match "^DevToolsBoxName:(.+)$") {
-                try { $displayName = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($Matches[1])) } catch { }
+            $displayName = ($task.TaskName -replace "^(WinPsBox_|DevToolsBox_)", "")
+            if ([string]$task.Description -match "^(WinPsBoxName|DevToolsBoxName):(.+)$") {
+                try { $displayName = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($Matches[2])) } catch { }
             }
 
             $items.Add([PSCustomObject]@{
@@ -702,7 +705,7 @@ function New-ToolboxScheduledTask([string]$name, [string]$actionKey, [string]$sc
         }
         $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
         $encodedDisplayName = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($displayName))
-        Register-ScheduledTask -TaskName $taskName -Action $taskAction -Trigger $trigger -Settings $settings -Description "DevToolsBoxName:$encodedDisplayName" -Force -ErrorAction Stop | Out-Null
+        Register-ScheduledTask -TaskName $taskName -Action $taskAction -Trigger $trigger -Settings $settings -Description "WinPsBoxName:$encodedDisplayName" -Force -ErrorAction Stop | Out-Null
 
         return @{ success = $true; id = $taskName; message = "定时任务已创建" }
     }
@@ -713,8 +716,8 @@ function New-ToolboxScheduledTask([string]$name, [string]$actionKey, [string]$sc
 
 function Set-ToolboxScheduledTaskState([string]$taskName, [bool]$enabled) {
     try {
-        if (-not $taskName.StartsWith($script:ToolboxTaskPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
-            return @{ success = $false; error = "只能管理由 DevTools Box 创建的任务" }
+        if (-not ($taskName.StartsWith($script:ToolboxTaskPrefix, [System.StringComparison]::OrdinalIgnoreCase) -or $taskName.StartsWith("DevToolsBox_", [System.StringComparison]::OrdinalIgnoreCase))) {
+            return @{ success = $false; error = "只能管理由 WinPsBox 创建的任务" }
         }
         $task = Get-ScheduledTask -TaskName $taskName -ErrorAction Stop
         if ($enabled) { $task | Enable-ScheduledTask -ErrorAction Stop | Out-Null }
@@ -726,8 +729,8 @@ function Set-ToolboxScheduledTaskState([string]$taskName, [bool]$enabled) {
 
 function Remove-ToolboxScheduledTask([string]$taskName) {
     try {
-        if (-not $taskName.StartsWith($script:ToolboxTaskPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
-            return @{ success = $false; error = "只能删除由 DevTools Box 创建的任务" }
+        if (-not ($taskName.StartsWith($script:ToolboxTaskPrefix, [System.StringComparison]::OrdinalIgnoreCase) -or $taskName.StartsWith("DevToolsBox_", [System.StringComparison]::OrdinalIgnoreCase))) {
+            return @{ success = $false; error = "只能删除由 WinPsBox 创建的任务" }
         }
         Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction Stop
         return @{ success = $true; message = "任务已删除" }
@@ -853,7 +856,7 @@ function Set-ContextMenuItemState([string]$type, [string]$registryPath, [string]
             $blockedPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Shell Extensions\Blocked"
             if (-not (Test-Path -LiteralPath $blockedPath)) { New-Item -Path $blockedPath -Force | Out-Null }
             if ($enabled) { Remove-ItemProperty -LiteralPath $blockedPath -Name $clsid -ErrorAction SilentlyContinue }
-            else { New-ItemProperty -LiteralPath $blockedPath -Name $clsid -Value "Disabled by DevTools Box" -PropertyType String -Force | Out-Null }
+            else { New-ItemProperty -LiteralPath $blockedPath -Name $clsid -Value "Disabled by WinPsBox" -PropertyType String -Force | Out-Null }
         }
         else { return @{ success = $false; error = "不支持的右键菜单项目类型" } }
 

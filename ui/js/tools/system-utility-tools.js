@@ -108,7 +108,7 @@ const ScheduledTaskTool = {
             <div class="tool-toolbar-left">
               <div>
                 <h5 class="utility-section-title">我的定时任务</h5>
-                <p class="utility-section-subtitle">仅显示和管理由 DevTools Box 创建的任务</p>
+                <p class="utility-section-subtitle">仅显示和管理由 WinPsBox 创建的任务</p>
               </div>
             </div>
             <div class="tool-toolbar-right">

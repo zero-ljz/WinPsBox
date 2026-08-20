@@ -1,4 +1,4 @@
-﻿# Native system tray integration and quick actions.
+# Native system tray integration and quick actions.
 $script:AllowAppExit = $false
 $script:TrayHintShown = $false
 $script:MinimizeToTray = $true
@@ -97,7 +97,7 @@ function Hide-AppToTray([bool]$showHint = $true) {
 
     if ($showHint -and -not $script:TrayHintShown -and $null -ne $script:TrayIcon) {
         $script:TrayHintShown = $true
-        $script:TrayIcon.BalloonTipTitle = "DevTools Box 正在后台运行"
+        $script:TrayIcon.BalloonTipTitle = "WinPsBox 正在后台运行"
         $script:TrayIcon.BalloonTipText = "双击图标打开工具箱，右键可使用快捷面板。"
         $script:TrayIcon.BalloonTipIcon = [System.Windows.Forms.ToolTipIcon]::Info
         $script:TrayIcon.ShowBalloonTip(2500)
@@ -233,11 +233,11 @@ function Initialize-AppTray {
     $script:TrayMenu.ShowCheckMargin = $true
     $script:TrayMenu.Font = New-Object System.Drawing.Font("Microsoft YaHei UI", 9)
 
-    $statusItem = New-TrayMenuItem "DevTools Box · 本地运行中" $null
+    $statusItem = New-TrayMenuItem "WinPsBox · 本地运行中" $null
     $statusItem.Enabled = $false
     $statusItem.Font = New-Object System.Drawing.Font($script:TrayMenu.Font, [System.Drawing.FontStyle]::Bold)
 
-    $script:TrayShowItem = New-TrayMenuItem "打开 DevTools Box" { Show-AppWindow }
+    $script:TrayShowItem = New-TrayMenuItem "打开 WinPsBox" { Show-AppWindow }
     $script:TrayShowItem.Font = New-Object System.Drawing.Font($script:TrayMenu.Font, [System.Drawing.FontStyle]::Bold)
 
     $script:TrayQuickMenu = New-TrayMenuItem "快速打开收藏" $null
@@ -248,7 +248,7 @@ function Initialize-AppTray {
         Set-AppAutoStartFromTray -enabled (-not (Get-AutoStartStatus))
     }
     $adminItem = New-TrayMenuItem "以管理员身份重启" { Restart-AppElevated }
-    $exitItem = New-TrayMenuItem "退出 DevTools Box" { Request-AppExit }
+    $exitItem = New-TrayMenuItem "退出 WinPsBox" { Request-AppExit }
 
     [void]$script:TrayMenu.Items.Add($statusItem)
     [void]$script:TrayMenu.Items.Add((New-Object System.Windows.Forms.ToolStripSeparator))
@@ -265,13 +265,13 @@ function Initialize-AppTray {
         $script:TrayAutoStartItem.Checked = Get-AutoStartStatus
         Update-TrayFavoriteMenu
         $isWindowOpen = $form.Visible -and $form.WindowState -ne [System.Windows.Forms.FormWindowState]::Minimized
-        $script:TrayShowItem.Text = if ($isWindowOpen) { "DevTools Box 已打开" } else { "打开 DevTools Box" }
+        $script:TrayShowItem.Text = if ($isWindowOpen) { "WinPsBox 已打开" } else { "打开 WinPsBox" }
         $script:TrayShowItem.Enabled = -not $isWindowOpen
     })
 
     $script:TrayIcon = New-Object System.Windows.Forms.NotifyIcon
     $script:TrayIcon.Icon = $script:AppIcon
-    $script:TrayIcon.Text = "DevTools Box - Windows 开发运维工作台"
+    $script:TrayIcon.Text = "WinPsBox - Windows 开发运维工作台"
     $script:TrayIcon.ContextMenuStrip = $script:TrayMenu
     $script:TrayIcon.Visible = $true
     $script:TrayIcon.Add_DoubleClick({ Show-AppWindow })
