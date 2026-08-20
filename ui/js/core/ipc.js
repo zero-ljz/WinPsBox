@@ -59,6 +59,8 @@ const IPC = {
         } else {
           const error = new Error(msg.error || 'IPC call failed');
           error.cancelled = Boolean(msg.cancelled);
+          error.data = msg.data || null;
+          error.needsAdmin = Boolean(msg.data && msg.data.needsAdmin);
           callback.reject(error);
         }
       });
@@ -69,6 +71,41 @@ const IPC = {
 
   isBackgroundAction(action) {
     return action.startsWith('winget_') || this.backgroundActions.has(action);
+  },
+
+  getTimeoutMs(action, payload = {}, options = {}) {
+    const requestedTimeout = Number(options.requestTimeoutMs);
+    if (Number.isFinite(requestedTimeout) && requestedTimeout > 0) {
+      return Math.max(1000, requestedTimeout);
+    }
+
+    if (action === 'winget_batch_action') {
+      const packageCount = Math.max(1, Number(payload.packageIds?.length || 0));
+      return Math.max(15 * 60 * 1000, Math.min(packageCount * 3 * 60 * 1000, 2 * 60 * 60 * 1000));
+    }
+    if (action === 'winget_package_action') return 30 * 60 * 1000;
+    if (action === 'winget_get_packages' || action === 'winget_search') return 5 * 60 * 1000;
+    if (action === 'winget_get_status') return 2 * 60 * 1000;
+    if (action === 'ssh_install_capability') return 30 * 60 * 1000;
+    if (action === 'net_dns_deep_diagnostic') return 3 * 60 * 1000;
+    if (action === 'net_intel_lookup' || action === 'diag_run') return 2 * 60 * 1000;
+    if (action === 'net_ping') {
+      const count = Math.max(1, Number(payload.count) || 4);
+      const operationTimeout = Math.max(250, Number(payload.timeoutMs) || 2000);
+      return Math.min(5 * 60 * 1000, Math.max(60 * 1000, count * operationTimeout + 30 * 1000));
+    }
+    if (action === 'net_trace_route') {
+      const maxHops = Math.max(1, Number(payload.maxHops) || 20);
+      const operationTimeout = Math.max(250, Number(payload.timeoutMs) || 1500);
+      return Math.min(10 * 60 * 1000, Math.max(90 * 1000, maxHops * operationTimeout + 30 * 1000));
+    }
+    if (action === 'net_check_ssl') return 30 * 1000;
+    if (this.isBackgroundAction(action)) return 2 * 60 * 1000;
+    if (action.startsWith('cert_') || action === 'sys_elevate_app') return 5 * 60 * 1000;
+    if (action.startsWith('sys_set_') || action === 'sys_save_hosts' || action.startsWith('net_set_') || action.startsWith('net_add_') || action.startsWith('net_remove_')) {
+      return 2 * 60 * 1000;
+    }
+    return 30 * 1000;
   },
 
   send(action, payload = {}, options = {}) {
@@ -106,18 +143,15 @@ const IPC = {
         timeoutId: null
       };
       this.callbacks.set(id, callback);
-      window.chrome.webview.postMessage({ id, action, payload });
+      try {
+        window.chrome.webview.postMessage({ id, action, payload });
+      } catch (error) {
+        this.callbacks.delete(id);
+        reject(error);
+        return;
+      }
 
-      // Timeout safeguard
-      const timeoutMs = action === 'winget_batch_action'
-        ? Math.max(15 * 60 * 1000, Math.min(Number(payload.packageIds?.length || 0) * 3 * 60 * 1000, 2 * 60 * 60 * 1000))
-        : action === 'winget_package_action'
-        ? 15 * 60 * 1000
-        : action === 'ssh_install_capability'
-        ? 15 * 60 * 1000
-        : (action.startsWith('winget_') || action.startsWith('cert_') || action.startsWith('diag_') || action.startsWith('wsl_') || action === 'net_ping' || action === 'net_check_remote_port' || action === 'net_trace_route' || action === 'net_scan_lan' || action === 'net_dns_deep_diagnostic' || action === 'net_intel_lookup' || action === 'net_get_portproxy_targets')
-          ? 60000
-          : 15000;
+      const timeoutMs = this.getTimeoutMs(action, payload, options);
       callback.timeoutId = setTimeout(() => {
         if (this.callbacks.has(id)) {
           this.callbacks.delete(id);

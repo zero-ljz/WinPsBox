@@ -78,5 +78,9 @@ $form.Add_Shown({
     }
 })
 
-[System.Windows.Forms.Application]::Run($form)
-Stop-AllAppTasks
+try {
+    [System.Windows.Forms.Application]::Run($form)
+}
+finally {
+    Stop-AllAppTasks
+}

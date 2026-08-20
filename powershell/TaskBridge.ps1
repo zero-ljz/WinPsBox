@@ -3,9 +3,18 @@ $script:pendingAppTasks = New-Object System.Collections.ArrayList
 $script:appTaskWorkerPath = Join-Path $script:PowerShellRoot "AppTaskWorker.ps1"
 $script:wingetWorkerPath = Join-Path $script:PowerShellRoot "WingetWorker.ps1"
 $script:appTaskEventRoot = Join-Path $dataPath "TaskEvents"
+$script:appTaskInstanceEventRoot = Join-Path $script:appTaskEventRoot ([string]$PID)
 $script:appTaskPollTimer = New-Object System.Windows.Forms.Timer
 $script:appTaskPollTimer.Interval = 100
 [System.IO.Directory]::CreateDirectory($script:appTaskEventRoot) | Out-Null
+[System.IO.Directory]::CreateDirectory($script:appTaskInstanceEventRoot) | Out-Null
+foreach ($staleDirectory in @(Get-ChildItem -LiteralPath $script:appTaskEventRoot -Directory -ErrorAction SilentlyContinue)) {
+    $ownerPid = 0
+    if (-not [int]::TryParse($staleDirectory.Name, [ref]$ownerPid) -or $ownerPid -eq $PID) { continue }
+    if ($null -eq (Get-Process -Id $ownerPid -ErrorAction SilentlyContinue)) {
+        Remove-Item -LiteralPath $staleDirectory.FullName -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
 
 $script:backgroundAppActions = @(
     "net_check_remote_port",
@@ -49,6 +58,61 @@ function Complete-AppTask($task, [bool]$success, $data = $null, [string]$errorMe
     })
 }
 
+function Read-AppTaskEventLines($task) {
+    if (-not (Test-Path -LiteralPath $task.eventPath -PathType Leaf)) { return @() }
+
+    $stream = $null
+    $reader = $null
+    try {
+        $stream = New-Object System.IO.FileStream(
+            $task.eventPath,
+            [System.IO.FileMode]::Open,
+            [System.IO.FileAccess]::Read,
+            [System.IO.FileShare]::ReadWrite
+        )
+        if ($task.eventOffset -gt $stream.Length) {
+            $task.eventOffset = 0L
+            $task.eventBuffer = ""
+        }
+        [void]$stream.Seek([int64]$task.eventOffset, [System.IO.SeekOrigin]::Begin)
+        $reader = New-Object System.IO.StreamReader($stream, (New-Object System.Text.UTF8Encoding($false)), $false)
+        $chunk = $reader.ReadToEnd()
+        $task.eventOffset = $stream.Position
+    }
+    finally {
+        if ($reader) { $reader.Dispose() }
+        elseif ($stream) { $stream.Dispose() }
+    }
+
+    if ([string]::IsNullOrEmpty($chunk)) { return @() }
+    $pending = [string]$task.eventBuffer + $chunk
+    $lines = New-Object System.Collections.Generic.List[string]
+    while (($newlineIndex = $pending.IndexOf("`n", [System.StringComparison]::Ordinal)) -ge 0) {
+        $line = $pending.Substring(0, $newlineIndex).TrimEnd("`r")
+        $pending = $pending.Substring($newlineIndex + 1)
+        if (-not [string]::IsNullOrWhiteSpace($line)) { $lines.Add($line) }
+    }
+    $task.eventBuffer = $pending
+    return @($lines)
+}
+
+function Receive-AppTaskEvent($task, [string]$line) {
+    try {
+        $workerEvent = ConvertFrom-Json $line -ErrorAction Stop
+        if ($workerEvent.event -eq "progress" -and -not $task.terminalSent) {
+            Send-AppTaskMessage $task ([ordered]@{ event = "progress"; progress = $workerEvent.progress })
+        }
+        elseif ($workerEvent.event -eq "result") {
+            Complete-AppTask $task ([bool]$workerEvent.success) $workerEvent.data ([string]$workerEvent.error) ([bool]$workerEvent.cancelled)
+        }
+        return $true
+    }
+    catch {
+        $task.transportError = "Failed to parse a background task event: $($_.Exception.Message)"
+        return $false
+    }
+}
+
 function Start-AppTaskRequest($webViewCore, [string]$requestId, [string]$action, $payload) {
     $process = $null
     $eventPath = $null
@@ -60,7 +124,7 @@ function Start-AppTaskRequest($webViewCore, [string]$requestId, [string]$action,
 
         $requestJson = ConvertTo-Json -InputObject @{ action = $action; payload = $payload } -Compress -Depth 12
         $requestBase64 = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($requestJson))
-        $eventPath = Join-Path $script:appTaskEventRoot (([Guid]::NewGuid().ToString("N")) + ".ndjson")
+        $eventPath = Join-Path $script:appTaskInstanceEventRoot (([Guid]::NewGuid().ToString("N")) + ".ndjson")
         [System.IO.File]::WriteAllText($eventPath, "", (New-Object System.Text.UTF8Encoding($false)))
         $eventPathBase64 = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($eventPath))
         $hostExecutable = (Get-Process -Id $PID).Path
@@ -88,7 +152,9 @@ function Start-AppTaskRequest($webViewCore, [string]$requestId, [string]$action,
             requestId = $requestId
             action = $action
             eventPath = $eventPath
-            eventIndex = 0
+            eventOffset = 0L
+            eventBuffer = ""
+            transportError = ""
             terminalSent = $false
             exitObservedAt = $null
         }
@@ -139,32 +205,27 @@ function Remove-CompletedAppTask($task) {
 $script:appTaskPollTimer.Add_Tick({
     foreach ($task in @($script:pendingAppTasks)) {
         try {
-            $lines = if (Test-Path -LiteralPath $task.eventPath) { @(Get-Content -LiteralPath $task.eventPath -Encoding UTF8 -ErrorAction Stop) } else { @() }
-            while ($task.eventIndex -lt $lines.Count) {
-                $line = [string]$lines[$task.eventIndex]
-                if ([string]::IsNullOrWhiteSpace($line)) { $task.eventIndex++; continue }
-
-                try { $workerEvent = ConvertFrom-Json $line -ErrorAction Stop }
-                catch { break }
-                $task.eventIndex++
-                if ($workerEvent.event -eq "progress" -and -not $task.terminalSent) {
-                    Send-AppTaskMessage $task ([ordered]@{ event = "progress"; progress = $workerEvent.progress })
-                }
-                elseif ($workerEvent.event -eq "result") {
-                    Complete-AppTask $task ([bool]$workerEvent.success) $workerEvent.data ([string]$workerEvent.error) $false
-                }
+            foreach ($line in @(Read-AppTaskEventLines $task)) {
+                [void](Receive-AppTaskEvent $task $line)
             }
         }
-        catch { }
+        catch {
+            $task.transportError = "Failed to read background task events: $($_.Exception.Message)"
+        }
 
         $hasExited = $false
         try { $hasExited = $task.process.HasExited } catch { $hasExited = $true }
         if ($hasExited -and -not $task.exitObservedAt) { $task.exitObservedAt = [DateTime]::UtcNow }
 
-        if ($hasExited -and -not $task.terminalSent -and (([DateTime]::UtcNow - $task.exitObservedAt).TotalMilliseconds -ge 300)) {
+        if ($hasExited -and -not $task.terminalSent -and -not [string]::IsNullOrWhiteSpace([string]$task.eventBuffer)) {
+            [void](Receive-AppTaskEvent $task ([string]$task.eventBuffer))
+            $task.eventBuffer = ""
+        }
+
+        if ($hasExited -and -not $task.terminalSent -and (([DateTime]::UtcNow - $task.exitObservedAt).TotalMilliseconds -ge 500)) {
             $stderr = ""
             try { $stderr = $task.stderrTask.GetAwaiter().GetResult().Trim() } catch { }
-            $message = if ($stderr) { $stderr } else { "后台任务进程未返回结果。" }
+            $message = if ($stderr) { $stderr } elseif ($task.transportError) { $task.transportError } else { "后台任务进程未返回结果。" }
             Complete-AppTask $task $false $null $message $false
         }
 
@@ -179,5 +240,8 @@ function Stop-AllAppTasks {
     foreach ($task in @($script:pendingAppTasks)) {
         Stop-AppTaskProcess $task
         Remove-CompletedAppTask $task
+    }
+    if (Test-Path -LiteralPath $script:appTaskInstanceEventRoot -PathType Container) {
+        Remove-Item -LiteralPath $script:appTaskInstanceEventRoot -Recurse -Force -ErrorAction SilentlyContinue
     }
 }

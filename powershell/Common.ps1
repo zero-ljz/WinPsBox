@@ -144,10 +144,16 @@ function Set-AutoStartStatus([bool]$enable) {
 }
 
 function Get-AppConfig {
-    if (Test-Path $configFile) {
+    $backupFile = "$configFile.bak"
+    foreach ($candidate in @($configFile, $backupFile)) {
+        if (-not (Test-Path -LiteralPath $candidate -PathType Leaf)) { continue }
         try {
-            $raw = Get-Content -Path $configFile -Raw -Encoding UTF8
-            return (ConvertFrom-Json $raw)
+            $raw = [System.IO.File]::ReadAllText($candidate, [System.Text.Encoding]::UTF8)
+            $config = ConvertFrom-Json $raw -ErrorAction Stop
+            if ($candidate -eq $backupFile) {
+                [void](Save-AppConfig -configObj $config)
+            }
+            return $config
         }
         catch { }
     }
@@ -160,12 +166,48 @@ function Get-AppConfig {
 }
 
 function Save-AppConfig($configObj) {
+    $tempFile = $null
+    $replaceBackupFile = $null
     try {
+        $configDirectory = Split-Path -Parent $configFile
+        [System.IO.Directory]::CreateDirectory($configDirectory) | Out-Null
         $json = ConvertTo-Json -InputObject $configObj -Depth 10
-        [System.IO.File]::WriteAllText($configFile, $json, [System.Text.Encoding]::UTF8)
+        [void](ConvertFrom-Json $json -ErrorAction Stop)
+
+        $tempFile = Join-Path $configDirectory (([System.IO.Path]::GetFileName($configFile)) + "." + [Guid]::NewGuid().ToString("N") + ".tmp")
+        [System.IO.File]::WriteAllText($tempFile, $json, (New-Object System.Text.UTF8Encoding($true)))
+
+        $backupFile = "$configFile.bak"
+        if (Test-Path -LiteralPath $configFile -PathType Leaf) {
+            $currentIsValid = $false
+            try {
+                $currentJson = [System.IO.File]::ReadAllText($configFile, [System.Text.Encoding]::UTF8)
+                [void](ConvertFrom-Json $currentJson -ErrorAction Stop)
+                $currentIsValid = $true
+            }
+            catch { }
+            $replaceBackupFile = if ($currentIsValid) { $backupFile } else { "$tempFile.replaced" }
+            [System.IO.File]::Replace($tempFile, $configFile, $replaceBackupFile, $true)
+            if (-not $currentIsValid -and (Test-Path -LiteralPath $replaceBackupFile)) {
+                Remove-Item -LiteralPath $replaceBackupFile -Force -ErrorAction SilentlyContinue
+            }
+            $replaceBackupFile = $null
+        }
+        else {
+            [System.IO.File]::Move($tempFile, $configFile)
+        }
+        $tempFile = $null
         return @{ success = $true }
     }
     catch {
         return @{ success = $false; error = $_.Exception.Message }
+    }
+    finally {
+        if ($tempFile -and (Test-Path -LiteralPath $tempFile)) {
+            Remove-Item -LiteralPath $tempFile -Force -ErrorAction SilentlyContinue
+        }
+        if ($replaceBackupFile -and $replaceBackupFile -ne "$configFile.bak" -and (Test-Path -LiteralPath $replaceBackupFile)) {
+            Remove-Item -LiteralPath $replaceBackupFile -Force -ErrorAction SilentlyContinue
+        }
     }
 }

@@ -265,6 +265,11 @@ const OpenSshManagerTool = {
   },
 
   async install(component, button) {
+    if (!this.state?.isAdmin) {
+      Toast.show('安装 Windows 可选功能需要管理员权限，正在请求管理员模式重启...', 'info', 3000);
+      await PrivilegeManager.requestElevation();
+      return;
+    }
     button.disabled = true;
     try {
       const result = await IPC.send('ssh_install_capability', { component });
@@ -276,6 +281,11 @@ const OpenSshManagerTool = {
   },
 
   async serviceAction(serviceAction, button) {
+    if (!this.state?.isAdmin) {
+      Toast.show('管理 sshd 服务需要管理员权限，正在请求管理员模式重启...', 'info', 3000);
+      await PrivilegeManager.requestElevation();
+      return;
+    }
     button.disabled = true;
     try {
       await IPC.send('ssh_service_action', { serviceAction });

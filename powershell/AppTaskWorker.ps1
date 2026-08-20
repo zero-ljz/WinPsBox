@@ -78,7 +78,7 @@ try {
         "ssh_install_capability" {
             Write-AppTaskProgress 15 "正在安装 Windows 组件" ([string]$payload.component)
             $result = Install-OpenSshCapability -component ([string]$payload.component)
-            $response = if ($result.success) { New-TaskWorkerResponse $true $result } else { New-TaskWorkerResponse $false $null $result.error }
+            $response = if ($result.success) { New-TaskWorkerResponse $true $result } else { New-TaskWorkerResponse $false $result $result.error }
         }
         "wsl_get_status" {
             Write-AppTaskProgress 25 "正在检查 WSL 发行版"
