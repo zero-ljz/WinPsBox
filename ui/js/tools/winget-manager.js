@@ -175,7 +175,8 @@ const WingetManagerTool = {
       this.updateSummary();
       this.renderTable();
     } catch (error) {
-      this.showLoadError(error.message);
+      if (error.cancelled) this.showTableLoading('WinGet 加载已取消');
+      else this.showLoadError(error.message);
     }
   },
 
@@ -375,7 +376,8 @@ const WingetManagerTool = {
       this.searchResults = result.items || [];
       this.renderTable();
     } catch (error) {
-      this.showLoadError(error.message);
+      if (error.cancelled) this.showTableLoading('WinGet 搜索已取消');
+      else this.showLoadError(error.message);
     } finally {
       this.setBusy(false);
     }
@@ -402,7 +404,8 @@ const WingetManagerTool = {
       this.updateSummary();
       this.renderTable();
     } catch (error) {
-      this.showLoadError(error.message);
+      if (error.cancelled) this.showTableLoading('WinGet 刷新已取消');
+      else this.showLoadError(error.message);
     } finally {
       this.setBusy(false);
     }
@@ -424,7 +427,7 @@ const WingetManagerTool = {
         Toast.show(`操作已完成，但列表刷新失败: ${refreshError.message}`, 'warning', 5000);
       }
     } catch (error) {
-      Toast.show(`${actionName}失败: ${error.message}`, 'error', 6000);
+      Toast.show(error.cancelled ? `${actionName}已取消` : `${actionName}失败: ${error.message}`, error.cancelled ? 'info' : 'error', 6000);
     } finally {
       this.setBusy(false);
     }
@@ -462,7 +465,7 @@ const WingetManagerTool = {
         Toast.show(`操作已完成，但列表刷新失败: ${refreshError.message}`, 'warning', 5000);
       }
     } catch (error) {
-      Toast.show(`批量${actionName}失败: ${error.message}`, 'error', 6000);
+      Toast.show(error.cancelled ? `批量${actionName}已取消` : `批量${actionName}失败: ${error.message}`, error.cancelled ? 'info' : 'error', 6000);
     } finally {
       this.setBusy(false);
     }

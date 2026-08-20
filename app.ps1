@@ -25,7 +25,7 @@ Add-Type -Path (Join-Path $libPath "Microsoft.Web.WebView2.WinForms.dll")
 . (Join-Path $script:PowerShellRoot "SystemTools.ps1")
 . (Join-Path $script:PowerShellRoot "NetworkDeveloperTools.ps1")
 . (Join-Path $script:PowerShellRoot "DeveloperAdminTools.ps1")
-. (Join-Path $script:PowerShellRoot "WingetBridge.ps1")
+. (Join-Path $script:PowerShellRoot "TaskBridge.ps1")
 . (Join-Path $script:PowerShellRoot "TrayIcon.ps1")
 . (Join-Path $script:PowerShellRoot "IpcRouter.ps1")
 
@@ -79,3 +79,4 @@ $form.Add_Shown({
 })
 
 [System.Windows.Forms.Application]::Run($form)
+Stop-AllAppTasks

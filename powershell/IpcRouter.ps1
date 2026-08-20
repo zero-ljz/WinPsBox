@@ -30,8 +30,21 @@ function Register-AppWebViewHandlers($webView) {
                 $action = $request.action
                 $payload = $request.payload
     
-                if ($action -like "winget_*") {
-                    $queueResult = Start-WingetWorkerRequest -webViewCore $s -requestId $reqId -action $action -payload $payload
+                if ($action -eq "task_cancel") {
+                    $cancelResult = Stop-AppTaskRequest -taskId ([string]$payload.taskId)
+                    $cancelResponse = @{
+                        id = $reqId
+                        action = $action
+                        success = [bool]$cancelResult.success
+                        data = if ($cancelResult.success) { $cancelResult } else { $null }
+                        error = if ($cancelResult.success) { $null } else { $cancelResult.error }
+                    }
+                    $s.PostWebMessageAsJson((ConvertTo-Json -InputObject $cancelResponse -Compress -Depth 10))
+                    return
+                }
+
+                if (Test-AppBackgroundAction -action $action) {
+                    $queueResult = Start-AppTaskRequest -webViewCore $s -requestId $reqId -action $action -payload $payload
                     if (-not $queueResult.success) {
                         $queueError = @{
                             id = $reqId

@@ -43,6 +43,7 @@ function Get-LocalPortList {
 }
 
 function Test-RemotePorts($hostName, $ports, [int]$timeoutMs = 1200) {
+    Write-AppTaskProgress 8 "正在校验端口列表" $hostName
     $portList = [System.Collections.Generic.List[int]]::new()
     foreach ($p in $ports) {
         if ($p -is [int]) {
@@ -75,8 +76,12 @@ function Test-RemotePorts($hostName, $ports, [int]$timeoutMs = 1200) {
 
     $results = [System.Collections.Generic.List[PSCustomObject]]::new()
     $batchSize = 250
+    $batchTotal = [math]::Max(1, [math]::Ceiling($uniquePorts.Count / $batchSize))
+    $batchNumber = 0
 
     for ($b = 0; $b -lt $uniquePorts.Count; $b += $batchSize) {
+        $batchNumber++
+        Write-AppTaskProgress (10 + [math]::Floor((($batchNumber - 1) / $batchTotal) * 85)) "正在探测远程端口" "批次 $batchNumber / $batchTotal"
         $batchCount = [math]::Min($batchSize, $uniquePorts.Count - $b)
         $batch = $uniquePorts[$b..($b + $batchCount - 1)]
 
@@ -151,12 +156,14 @@ function Test-RemotePorts($hostName, $ports, [int]$timeoutMs = 1200) {
                 error = $err
             })
         }
+        Write-AppTaskProgress (10 + [math]::Floor(($batchNumber / $batchTotal) * 85)) "正在探测远程端口" "$($results.Count) / $($uniquePorts.Count)"
     }
 
     return $results
 }
 
 function Test-PingAndDns($targetHost, [int]$count = 4, [int]$timeoutMs = 2000) {
+    Write-AppTaskProgress 8 "正在解析目标" $targetHost
     $dnsIps = @()
     try {
         $entry = [System.Net.Dns]::GetHostAddresses($targetHost)
@@ -172,6 +179,7 @@ function Test-PingAndDns($targetHost, [int]$count = 4, [int]$timeoutMs = 2000) {
     $received = 0
 
     for ($i = 1; $i -le $count; $i++) {
+        Write-AppTaskProgress (10 + [math]::Floor((($i - 1) / [math]::Max(1, $count)) * 85)) "正在发送 Ping 请求" "$i / $count"
         try {
             $reply = $ping.Send($targetHost, $timeoutMs)
             if ($reply.Status -eq [System.Net.NetworkInformation.IPStatus]::Success) {
@@ -203,6 +211,7 @@ function Test-PingAndDns($targetHost, [int]$count = 4, [int]$timeoutMs = 2000) {
                 status = $_.Exception.Message
             })
         }
+        Write-AppTaskProgress (10 + [math]::Floor(($i / [math]::Max(1, $count)) * 85)) "正在发送 Ping 请求" "$i / $count"
         if ($i -lt $count) { Start-Sleep -Milliseconds 150 }
     }
 
@@ -407,6 +416,7 @@ function Get-PortProxyV4ToV4Rules {
 
 function Get-PortProxyTargetCandidates {
     try {
+        Write-AppTaskProgress 10 "正在检查 WSL 地址"
         $candidates = [System.Collections.Generic.List[PSCustomObject]]::new()
         $seenAddresses = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
         $addCandidate = {
@@ -438,6 +448,7 @@ function Get-PortProxyTargetCandidates {
             }
         }
 
+        Write-AppTaskProgress 55 "正在检查现有转发规则"
         $currentRules = Get-PortProxyV4ToV4Rules
         if ($currentRules.success) {
             foreach ($rule in @($currentRules.rules)) {
@@ -445,6 +456,7 @@ function Get-PortProxyTargetCandidates {
             }
         }
 
+        Write-AppTaskProgress 70 "正在检查本机网卡"
         $localAddresses = @(Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue | Where-Object {
             $_.IPAddress -ne "127.0.0.1" -and
             $_.IPAddress -notlike "169.254.*" -and
@@ -454,6 +466,7 @@ function Get-PortProxyTargetCandidates {
             & $addCandidate ([string]$item.IPAddress) "本机网卡" ([string]$item.InterfaceAlias)
         }
 
+        Write-AppTaskProgress 85 "正在检查网络邻居"
         $neighbors = @(Get-NetNeighbor -AddressFamily IPv4 -ErrorAction SilentlyContinue | Where-Object {
             $_.State -notin @("Unreachable", "Incomplete") -and
             $_.IPAddress -notlike "169.254.*" -and
@@ -588,6 +601,7 @@ function Start-PortProxyIpHelperService {
 # ----------------- 2. LAN Scanner Functions -----------------
 function Invoke-LanScanner([string]$subnetBase = "") {
     try {
+        Write-AppTaskProgress 5 "正在检测本地网段"
         if (-not $subnetBase) {
             $localIpObj = Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue | Where-Object { $_.IPAddress -ne "127.0.0.1" -and $_.IPAddress -notlike "169.254*" -and $_.InterfaceAlias -notlike "*vEthernet*" -and $_.InterfaceAlias -notlike "*Loopback*" -and $_.InterfaceAlias -notlike "*tun*" } | Select-Object -First 1
             if (-not $localIpObj) {
@@ -603,6 +617,7 @@ function Invoke-LanScanner([string]$subnetBase = "") {
 
         $localIps = (Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue).IPAddress
 
+        Write-AppTaskProgress 15 "正在探测本地网段" "$subnetBase.0/24"
         # 1. High-speed Ping sweep to warm up ARP neighbor cache
         $pingTasks = [System.Collections.Generic.List[hashtable]]::new()
         for ($i = 1; $i -le 254; $i++) {
@@ -624,6 +639,7 @@ function Invoke-LanScanner([string]$subnetBase = "") {
             Start-Sleep -Milliseconds 20
         }
 
+        Write-AppTaskProgress 55 "正在读取邻居缓存"
         # 2. Extract valid ARP entries from Neighbor Cache (Filter out Unreachable and 00-00-00 MACs)
         $arpMap = @{}
         try {
@@ -666,6 +682,7 @@ function Invoke-LanScanner([string]$subnetBase = "") {
             }
         }
 
+        Write-AppTaskProgress 75 "正在解析设备名称" "$($discoveredIps.Count) 台设备"
         # 4. Async Hostname Resolution (non-blocking, max 250ms)
         $hostTasks = @{}
         foreach ($ip in $discoveredIps) {
@@ -698,6 +715,7 @@ function Invoke-LanScanner([string]$subnetBase = "") {
             "54-48-10" = "Lenovo"; "B0-25-AA" = "H3C"; "00-0F-E2" = "H3C"
         }
 
+        Write-AppTaskProgress 90 "正在整理设备清单"
         $devices = [System.Collections.Generic.List[PSCustomObject]]::new()
         foreach ($targetIp in $discoveredIps) {
             $isLocal = ($localIps -contains $targetIp)
@@ -744,6 +762,7 @@ function Invoke-LanScanner([string]$subnetBase = "") {
 function Get-SslCertificateDetails([string]$hostName, [int]$port = 443, [int]$timeoutMs = 5000) {
     $client = New-Object System.Net.Sockets.TcpClient
     try {
+        Write-AppTaskProgress 25 "正在建立 TCP 连接" "$hostName`:$port"
         $iar = $client.BeginConnect($hostName, $port, $null, $null)
         if (-not $iar.AsyncWaitHandle.WaitOne($timeoutMs, $false)) {
             $client.Close()
@@ -760,6 +779,7 @@ function Get-SslCertificateDetails([string]$hostName, [int]$port = 443, [int]$ti
         $sslStream.ReadTimeout = $timeoutMs
         $sslStream.WriteTimeout = $timeoutMs
 
+        Write-AppTaskProgress 55 "正在协商 TLS 会话"
         $sslStream.AuthenticateAsClient($hostName)
 
         $remoteCert = $sslStream.RemoteCertificate
@@ -769,6 +789,7 @@ function Get-SslCertificateDetails([string]$hostName, [int]$port = 443, [int]$ti
             return @{ success = $false; error = "未获取到远程服务器证书" }
         }
 
+        Write-AppTaskProgress 78 "正在检查证书链"
         $x509 = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new($remoteCert)
         $chain = [System.Security.Cryptography.X509Certificates.X509Chain]::new()
         $chain.Build($x509) | Out-Null
@@ -913,6 +934,7 @@ function Invoke-TraceRouteAction([string]$targetHost, [int]$maxHops = 20, [int]$
     $buffer = [System.Text.Encoding]::ASCII.GetBytes("0123456789abcdef0123456789abcdef")
 
     for ($ttl = 1; $ttl -le $maxHops; $ttl++) {
+        Write-AppTaskProgress (5 + [math]::Floor((($ttl - 1) / [math]::Max(1, $maxHops)) * 80)) "正在追踪路由" "第 $ttl / $maxHops 跳"
         $options = New-Object System.Net.NetworkInformation.PingOptions($ttl, $true)
         $sw = [System.Diagnostics.Stopwatch]::StartNew()
         try {
@@ -950,6 +972,7 @@ function Invoke-TraceRouteAction([string]$targetHost, [int]$maxHops = 20, [int]$
         }
     }
 
+    Write-AppTaskProgress 88 "正在解析节点名称" "$($hops.Count) 个节点"
     # Async non-blocking hostname resolution (max 250ms total)
     $hostTasks = @{}
     foreach ($h in $hops) {

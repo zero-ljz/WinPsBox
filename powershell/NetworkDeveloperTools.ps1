@@ -503,9 +503,12 @@ function Invoke-DeepDnsDiagnostic([string]$name, [string]$recordType = "A") {
     if ([string]::IsNullOrWhiteSpace($name) -or $name.Length -gt 253) { return @{ success = $false; error = "Invalid DNS name." } }
     try {
         $name = $name.Trim().TrimEnd('.')
+        Write-AppTaskProgress 10 "正在查询系统 DNS" $name
         $standard = Invoke-StandardDnsQuery -name $name -recordType $recordType
         $compareType = if ($recordType -eq "ALL") { "A" } else { $recordType }
+        Write-AppTaskProgress 35 "正在对比公共 DNS" $compareType
         $comparison = Invoke-DnsProviderComparison -name $name -recordType $compareType
+        Write-AppTaskProgress 72 "正在对比 DoH 服务" $compareType
         $doh = Invoke-DohProviderComparison -name $name -recordType $compareType
         return @{
             success = $true
@@ -602,6 +605,7 @@ function Get-NetworkIntelligence([string]$target) {
     $isIp = [System.Net.IPAddress]::TryParse($target, [ref]$parsedIp)
     $domain = if ($isIp) { "" } else { $target.ToLowerInvariant() }
     try {
+        Write-AppTaskProgress 8 "正在解析查询目标" $target
         $addresses = if ($isIp) { @($parsedIp) } else { @([System.Net.Dns]::GetHostAddresses($domain)) }
         if ($addresses.Count -eq 0) { throw "The domain did not resolve to an IP address." }
         $primaryIp = @($addresses | Where-Object { $_.AddressFamily -eq [System.Net.Sockets.AddressFamily]::InterNetwork } | Select-Object -First 1)
@@ -615,11 +619,15 @@ function Get-NetworkIntelligence([string]$target) {
         $rdapDomain = $null
         $sourceErrors = [System.Collections.Generic.List[PSCustomObject]]::new()
         if (-not $isLocal) {
+            Write-AppTaskProgress 25 "正在加载地理位置数据" $($ip.ToString())
             try { $geo = Invoke-NetworkJsonRequest -url ("https://ipwho.is/" + [Uri]::EscapeDataString($ip.ToString())) } catch { $sourceErrors.Add([PSCustomObject]@{ source = "ipwho.is"; error = $_.Exception.Message }) }
+            Write-AppTaskProgress 45 "正在加载 ASN 与网段数据"
             try { $ripe = Invoke-NetworkJsonRequest -url ("https://stat.ripe.net/data/prefix-overview/data.json?resource=" + [Uri]::EscapeDataString($ip.ToString())) } catch { $sourceErrors.Add([PSCustomObject]@{ source = "RIPE Stat"; error = $_.Exception.Message }) }
+            Write-AppTaskProgress 62 "正在加载 IP 注册数据"
             try { $rdapNetwork = Invoke-NetworkJsonRequest -url ("https://rdap.org/ip/" + [Uri]::EscapeDataString($ip.ToString())) } catch { $sourceErrors.Add([PSCustomObject]@{ source = "RDAP IP"; error = $_.Exception.Message }) }
         }
         if ($domain) {
+            Write-AppTaskProgress 78 "正在加载域名注册数据" $domain
             try { $rdapDomain = Invoke-NetworkJsonRequest -url ("https://rdap.org/domain/" + [Uri]::EscapeDataString($domain)) } catch { $sourceErrors.Add([PSCustomObject]@{ source = "RDAP Domain"; error = $_.Exception.Message }) }
         }
 
@@ -639,6 +647,7 @@ function Get-NetworkIntelligence([string]$target) {
             $asn = if ($null -ne $ripeAsn.asn) { [int64]$ripeAsn.asn } else { [int64]$ripeAsn }
         }
         if (-not $organization -and $ripeAsn -and $ripeAsn.holder) { $organization = [string]$ripeAsn.holder }
+        Write-AppTaskProgress 92 "正在分析网络归属"
         $classification = Get-IpClassification -ip $ip -asn $asn -organization $organization -networkDomain $networkDomain
 
         return @{

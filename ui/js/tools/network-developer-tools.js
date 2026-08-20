@@ -348,8 +348,9 @@ const DnsDeepDiagnosticTool = {
       this.renderActiveTab();
     } catch (error) {
       this.result = null;
-      this.root.querySelector('#dnsTabContent').innerHTML = NetworkDevUi.empty('circle-x', 'DNS 诊断失败', error.message);
-      Toast.show('DNS 诊断失败: ' + error.message, 'error');
+      const cancelled = Boolean(error.cancelled);
+      this.root.querySelector('#dnsTabContent').innerHTML = NetworkDevUi.empty(cancelled ? 'circle-slash-2' : 'circle-x', cancelled ? 'DNS 诊断已取消' : 'DNS 诊断失败', cancelled ? '' : error.message);
+      Toast.show(cancelled ? 'DNS 诊断已取消' : 'DNS 诊断失败: ' + error.message, cancelled ? 'info' : 'error');
     } finally {
       button.disabled = false;
       button.innerHTML = '<i data-lucide="scan-search"></i><span>开始诊断</span>';
@@ -457,8 +458,9 @@ const IpWhoisIntelligenceTool = {
       const result = await IPC.send('net_intel_lookup', { target });
       this.renderResult(result);
     } catch (error) {
-      this.root.querySelector('#intelResult').innerHTML = NetworkDevUi.empty('circle-x', '情报查询失败', error.message);
-      Toast.show('查询失败: ' + error.message, 'error');
+      const cancelled = Boolean(error.cancelled);
+      this.root.querySelector('#intelResult').innerHTML = NetworkDevUi.empty(cancelled ? 'circle-slash-2' : 'circle-x', cancelled ? '情报查询已取消' : '情报查询失败', cancelled ? '' : error.message);
+      Toast.show(cancelled ? '情报查询已取消' : '查询失败: ' + error.message, cancelled ? 'info' : 'error');
     } finally {
       button.disabled = false;
       button.innerHTML = '<i data-lucide="search"></i><span>查询情报</span>';

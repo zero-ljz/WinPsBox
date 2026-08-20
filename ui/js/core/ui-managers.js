@@ -40,6 +40,111 @@ const Toast = {
 };
 
 // ==========================================
+// 2.5 Background Task Activity
+// ==========================================
+const TaskActivity = {
+  tasks: new Map(),
+  labels: {
+    net_check_remote_port: '远程端口探测',
+    net_ping: 'Ping 网络诊断',
+    net_dns_deep_diagnostic: 'DNS 深度诊断',
+    net_intel_lookup: '网络情报查询',
+    diag_run: '系统诊断',
+    ssh_get_status: 'OpenSSH 状态检查',
+    ssh_install_capability: 'OpenSSH 组件安装',
+    wsl_get_status: 'WSL 状态检查',
+    wsl_get_online: 'WSL 在线列表',
+    net_get_portproxy_targets: '转发目标发现',
+    net_scan_lan: '局域网设备扫描',
+    net_check_ssl: 'TLS 证书检查',
+    net_trace_route: '路由追踪',
+    winget_get_status: 'WinGet 状态检查',
+    winget_get_packages: 'WinGet 软件清单',
+    winget_search: 'WinGet 软件搜索',
+    winget_package_action: 'WinGet 软件操作',
+    winget_batch_action: 'WinGet 批量操作'
+  },
+
+  ensureContainer() {
+    let container = document.getElementById('taskActivityContainer');
+    if (!container) {
+      container = document.createElement('div');
+      container.id = 'taskActivityContainer';
+      container.className = 'task-activity-container';
+      container.setAttribute('aria-live', 'polite');
+      document.body.appendChild(container);
+    }
+    return container;
+  },
+
+  start(taskId, action, progress = {}) {
+    if (!taskId) return;
+    if (this.tasks.has(taskId)) {
+      this.update(taskId, progress);
+      return;
+    }
+
+    const item = document.createElement('section');
+    item.className = 'task-activity-item';
+    item.dataset.taskId = taskId;
+    item.innerHTML = `
+      <div class="task-activity-header">
+        <i data-lucide="loader-circle" class="task-activity-icon"></i>
+        <strong></strong>
+        <span class="task-activity-percent">0%</span>
+        <button type="button" class="task-activity-cancel" title="取消任务" aria-label="取消任务">
+          <i data-lucide="x"></i>
+        </button>
+      </div>
+      <div class="task-activity-message"></div>
+      <div class="task-activity-progress" aria-hidden="true"><span></span></div>`;
+    item.querySelector('strong').textContent = this.labels[action] || action;
+    item.querySelector('.task-activity-cancel').onclick = async event => {
+      const button = event.currentTarget;
+      button.disabled = true;
+      button.title = '正在取消';
+      try {
+        await IPC.cancel(taskId);
+      } catch (error) {
+        button.disabled = false;
+        button.title = '取消任务';
+        Toast.show('取消任务失败: ' + error.message, 'error', 3000);
+      }
+    };
+    this.ensureContainer().appendChild(item);
+    this.tasks.set(taskId, item);
+    this.update(taskId, progress);
+    if (window.lucide) lucide.createIcons({ root: item });
+  },
+
+  update(taskId, progress = {}) {
+    const item = this.tasks.get(taskId);
+    if (!item) return;
+    const percent = Math.min(100, Math.max(0, Number(progress.percent) || 0));
+    const percentLabel = item.querySelector('.task-activity-percent');
+    const message = item.querySelector('.task-activity-message');
+    const bar = item.querySelector('.task-activity-progress span');
+    percentLabel.textContent = `${Math.round(percent)}%`;
+    bar.style.width = `${percent}%`;
+    message.textContent = [progress.message, progress.detail].filter(Boolean).join(' · ') || '正在处理';
+  },
+
+  finish(taskId, success, cancelled) {
+    const item = this.tasks.get(taskId);
+    if (!item) return;
+    item.classList.add(success ? 'is-success' : cancelled ? 'is-cancelled' : 'is-error');
+    const message = item.querySelector('.task-activity-message');
+    message.textContent = success ? '已完成' : cancelled ? '已取消' : '执行失败';
+    if (success) item.querySelector('.task-activity-progress span').style.width = '100%';
+    setTimeout(() => {
+      item.remove();
+      this.tasks.delete(taskId);
+    }, 2000);
+  }
+};
+window.TaskActivity = TaskActivity;
+
+// ==========================================
 // 3. Theme Manager (Light / Dark / Auto)
 // ==========================================
 const ThemeManager = {

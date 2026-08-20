@@ -350,8 +350,9 @@ const PortCheckerTool = {
       this.renderRemoteTable();
       Toast.show(`远程端口探测完成 (共 ${this.remoteResults.length} 个端口)`, 'success', 2000);
     } catch (e) {
-      tbody.innerHTML = `<tr><td colspan="4" class="text-center text-danger py-4">探测失败: ${e.message}</td></tr>`;
-      Toast.show('探测失败: ' + e.message, 'error', 3000);
+      const cancelled = Boolean(e.cancelled);
+      tbody.innerHTML = `<tr><td colspan="4" class="text-center ${cancelled ? 'text-muted' : 'text-danger'} py-4">${cancelled ? '端口探测已取消' : `探测失败: ${e.message}`}</td></tr>`;
+      Toast.show(cancelled ? '端口探测已取消' : '探测失败: ' + e.message, cancelled ? 'info' : 'error', 3000);
     } finally {
       if (btn) btn.disabled = false;
     }
@@ -504,8 +505,9 @@ const PingTool = {
       }
       Toast.show('网络诊断已完成', 'success', 2000);
     } catch (e) {
-      if (tbody) tbody.innerHTML = `<tr><td colspan="5" class="text-center text-danger py-4">诊断失败: ${e.message}</td></tr>`;
-      Toast.show('Ping 探测失败: ' + e.message, 'error', 3000);
+      const cancelled = Boolean(e.cancelled);
+      if (tbody) tbody.innerHTML = `<tr><td colspan="5" class="text-center ${cancelled ? 'text-muted' : 'text-danger'} py-4">${cancelled ? 'Ping 探测已取消' : `诊断失败: ${e.message}`}</td></tr>`;
+      Toast.show(cancelled ? 'Ping 探测已取消' : 'Ping 探测失败: ' + e.message, cancelled ? 'info' : 'error', 3000);
     } finally {
       btn.disabled = false;
     }

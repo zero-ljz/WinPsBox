@@ -94,10 +94,32 @@ $AppName = "PwshToolboxApp"
 $RunKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
 $hostsPath = "$env:SystemRoot\System32\drivers\etc\hosts"
 
+function Write-AppTaskProgress([int]$percent, [string]$message, [string]$detail = "") {
+    if ($script:AppTaskProgressWriter) {
+        & $script:AppTaskProgressWriter ([math]::Min(100, [math]::Max(0, $percent))) $message $detail
+    }
+}
+
+function Get-AutoStartCommand {
+    $batPath = Join-Path $script:AppRoot "WinPsBox.bat"
+    if (-not (Test-Path -LiteralPath $batPath -PathType Leaf)) {
+        throw "WinPsBox.bat was not found at the application root."
+    }
+    $batPath = (Resolve-Path -LiteralPath $batPath).Path
+    return "`"$batPath`" --StartMinimized"
+}
+
 function Get-AutoStartStatus {
     try {
         $val = Get-ItemProperty -Path $RunKey -Name $AppName -ErrorAction SilentlyContinue
-        return ($null -ne $val -and $null -ne $val.$AppName)
+        if ($null -eq $val -or [string]::IsNullOrWhiteSpace([string]$val.$AppName)) { return $false }
+
+        # Repair entries created before start.bat was renamed to WinPsBox.bat.
+        $expectedCommand = Get-AutoStartCommand
+        if ([string]$val.$AppName -ne $expectedCommand) {
+            Set-ItemProperty -Path $RunKey -Name $AppName -Value $expectedCommand -Force | Out-Null
+        }
+        return $true
     }
     catch {
         return $false
@@ -107,11 +129,7 @@ function Get-AutoStartStatus {
 function Set-AutoStartStatus([bool]$enable) {
     try {
         if ($enable) {
-            $batPath = Join-Path $script:AppRoot "start.bat"
-            if (Test-Path $batPath) {
-                $batPath = (Resolve-Path $batPath).Path
-            }
-            $cmd = "`"$batPath`" --StartMinimized"
+            $cmd = Get-AutoStartCommand
             Set-ItemProperty -Path $RunKey -Name $AppName -Value $cmd -Force | Out-Null
             return @{ success = $true; enabled = $true; message = "Auto-start enabled" }
         }

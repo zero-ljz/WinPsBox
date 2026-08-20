@@ -1,4 +1,4 @@
-# Diagnostic reports, OpenSSH management, and WSL management.
+﻿# Diagnostic reports, OpenSSH management, and WSL management.
 
 function New-DiagnosticCheck([string]$id, [string]$name, [string]$status, [string]$summary, [string]$detail = "") {
     return [PSCustomObject]@{
@@ -16,6 +16,7 @@ function Invoke-OneClickDiagnostic([string]$target = "www.microsoft.com") {
     $checks = [System.Collections.Generic.List[PSCustomObject]]::new()
     $started = Get-Date
 
+    Write-AppTaskProgress 5 "正在检查 Windows 系统"
     try {
         $os = Get-CimInstance Win32_OperatingSystem -ErrorAction Stop
         $uptime = (Get-Date) - $os.LastBootUpTime
@@ -25,6 +26,7 @@ function Invoke-OneClickDiagnostic([string]$target = "www.microsoft.com") {
         $checks.Add((New-DiagnosticCheck "system" "Windows system" "error" "Unable to read system information" $_.Exception.Message))
     }
 
+    Write-AppTaskProgress 15 "正在检查系统磁盘"
     try {
         $disk = Get-CimInstance Win32_LogicalDisk -Filter ("DeviceID='{0}'" -f $env:SystemDrive) -ErrorAction Stop
         $freeGB = [math]::Round($disk.FreeSpace / 1GB, 1)
@@ -37,6 +39,7 @@ function Invoke-OneClickDiagnostic([string]$target = "www.microsoft.com") {
         $checks.Add((New-DiagnosticCheck "disk" "System drive" "warn" "Unable to read disk capacity" $_.Exception.Message))
     }
 
+    Write-AppTaskProgress 27 "正在检查网络适配器"
     try {
         $adapters = @(Get-NetIPConfiguration -ErrorAction Stop | Where-Object { $_.IPv4Address })
         $connected = @($adapters | Where-Object { $_.NetAdapter.Status -eq "Up" })
@@ -52,6 +55,7 @@ function Invoke-OneClickDiagnostic([string]$target = "www.microsoft.com") {
         $checks.Add((New-DiagnosticCheck "adapter" "Network adapters" "error" "Unable to enumerate adapters" $_.Exception.Message))
     }
 
+    Write-AppTaskProgress 40 "正在检查默认路由"
     try {
         $route = Get-NetRoute -AddressFamily IPv4 -DestinationPrefix "0.0.0.0/0" -ErrorAction Stop | Sort-Object RouteMetric, InterfaceMetric | Select-Object -First 1
         if ($route) {
@@ -65,6 +69,7 @@ function Invoke-OneClickDiagnostic([string]$target = "www.microsoft.com") {
         $checks.Add((New-DiagnosticCheck "route" "Default route" "error" "Unable to read the default route" $_.Exception.Message))
     }
 
+    Write-AppTaskProgress 52 "正在测试 DNS 解析" $target
     try {
         $addresses = @([System.Net.Dns]::GetHostAddresses($target) | ForEach-Object { $_.IPAddressToString })
         if ($addresses.Count -gt 0) {
@@ -78,6 +83,7 @@ function Invoke-OneClickDiagnostic([string]$target = "www.microsoft.com") {
         $checks.Add((New-DiagnosticCheck "dns" "DNS resolution" "error" "Unable to resolve $target" $_.Exception.Message))
     }
 
+    Write-AppTaskProgress 64 "正在测试网络连通性" $target
     try {
         $ping = New-Object System.Net.NetworkInformation.Ping
         $reply = $ping.Send($target, 1800)
@@ -93,6 +99,7 @@ function Invoke-OneClickDiagnostic([string]$target = "www.microsoft.com") {
         $checks.Add((New-DiagnosticCheck "ping" "Network reachability" "warn" "Ping test failed" $_.Exception.Message))
     }
 
+    Write-AppTaskProgress 76 "正在检查 Windows 代理"
     try {
         $proxy = Get-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings" -ErrorAction Stop
         $enabled = [int]$proxy.ProxyEnable -eq 1
@@ -104,6 +111,7 @@ function Invoke-OneClickDiagnostic([string]$target = "www.microsoft.com") {
         $checks.Add((New-DiagnosticCheck "proxy" "Windows proxy" "warn" "Unable to read proxy settings" $_.Exception.Message))
     }
 
+    Write-AppTaskProgress 86 "正在检查核心服务"
     try {
         $serviceDetails = @()
         $serviceStatus = "pass"
@@ -120,6 +128,7 @@ function Invoke-OneClickDiagnostic([string]$target = "www.microsoft.com") {
         $checks.Add((New-DiagnosticCheck "services" "Core services" "warn" "Unable to inspect services" $_.Exception.Message))
     }
 
+    Write-AppTaskProgress 94 "正在检查待重启状态"
     $rebootKeys = @(
         "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending",
         "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired"

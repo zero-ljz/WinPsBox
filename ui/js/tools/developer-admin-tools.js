@@ -76,6 +76,11 @@ const DiagnosticReportTool = {
     const target = this.root.querySelector('#diagTarget').value.trim();
     const button = this.root.querySelector('#diagRun');
     const results = this.root.querySelector('#diagResults');
+    this.report = null;
+    this.root.querySelectorAll('.diag-metric b').forEach(metric => { metric.textContent = '-'; });
+    this.root.querySelector('#diagMeta').innerHTML = '<span>诊断运行中</span>';
+    this.root.querySelector('#diagExportMd').disabled = true;
+    this.root.querySelector('#diagExportJson').disabled = true;
     button.disabled = true;
     button.innerHTML = '<span class="spinner-border spinner-border-sm"></span><span>正在检查</span>';
     results.innerHTML = DeveloperToolUi.loading('正在检查系统与网络状态');
@@ -87,9 +92,10 @@ const DiagnosticReportTool = {
       this.root.querySelector('#diagExportMd').disabled = false;
       this.root.querySelector('#diagExportJson').disabled = false;
     } catch (error) {
-      results.innerHTML = DeveloperToolUi.empty('circle-x', '诊断运行失败', error.message);
-      this.root.querySelector('#diagState').textContent = '失败';
-      this.root.querySelector('#diagState').className = 'dev-state-badge error';
+      const cancelled = Boolean(error.cancelled);
+      results.innerHTML = DeveloperToolUi.empty(cancelled ? 'circle-slash-2' : 'circle-x', cancelled ? '诊断已取消' : '诊断运行失败', cancelled ? '' : error.message);
+      this.root.querySelector('#diagState').textContent = cancelled ? '已取消' : '失败';
+      this.root.querySelector('#diagState').className = `dev-state-badge ${cancelled ? 'neutral' : 'error'}`;
     } finally {
       button.disabled = false;
       button.innerHTML = '<i data-lucide="stethoscope"></i><span>重新诊断</span>';
@@ -265,7 +271,7 @@ const OpenSshManagerTool = {
       Toast.show(result.restartNeeded ? '安装完成，需要重启 Windows' : 'OpenSSH 组件安装完成', 'success', 3500);
       await this.load();
     } catch (error) {
-      Toast.show('安装失败: ' + error.message, 'error', 4000);
+      Toast.show(error.cancelled ? 'OpenSSH 组件安装已取消' : '安装失败: ' + error.message, error.cancelled ? 'info' : 'error', 4000);
     } finally { button.disabled = false; }
   },
 

@@ -1,12 +1,36 @@
 ﻿param(
     [Parameter(Mandatory = $true)]
-    [string]$RequestBase64
+    [string]$RequestBase64,
+    [string]$EventPathBase64 = ""
 )
 
 $ErrorActionPreference = "Stop"
 $utf8 = New-Object System.Text.UTF8Encoding($false)
 [Console]::OutputEncoding = $utf8
 $OutputEncoding = $utf8
+$script:wingetEventPath = if ($EventPathBase64) { $utf8.GetString([Convert]::FromBase64String($EventPathBase64)) } else { "" }
+
+function Write-WingetWorkerEvent($eventData) {
+    $json = ConvertTo-Json -InputObject $eventData -Compress -Depth 12
+    if ($script:wingetEventPath) {
+        [System.IO.File]::AppendAllText($script:wingetEventPath, $json + "`n", $utf8)
+    }
+    else {
+        [Console]::Out.Write($json)
+    }
+}
+
+function Write-WingetProgress([int]$percent, [string]$message, [string]$detail = "") {
+    if (-not $script:wingetEventPath) { return }
+    Write-WingetWorkerEvent ([ordered]@{
+        event = "progress"
+        progress = @{
+            percent = [math]::Min(100, [math]::Max(0, $percent))
+            message = $message
+            detail = $detail
+        }
+    })
+}
 
 function ConvertTo-NativeCommandLineArgument([string]$value) {
     if ($null -eq $value -or $value.Length -eq 0) { return '""' }
@@ -234,7 +258,9 @@ function Invoke-WingetBatchOperation([string]$operation, [object[]]$packageIds) 
     }
 
     $results = [System.Collections.Generic.List[object]]::new()
+    $completed = 0
     foreach ($packageId in $uniqueIds) {
+        Write-WingetProgress (10 + [math]::Floor(($completed / $uniqueIds.Count) * 85)) "正在处理软件包" $packageId
         $itemResult = Invoke-WingetPackageOperation -operation $operation -packageId $packageId
         $results.Add([PSCustomObject]@{
             success = [bool]$itemResult.success
@@ -242,6 +268,8 @@ function Invoke-WingetBatchOperation([string]$operation, [object[]]$packageIds) 
             exitCode = $itemResult.exitCode
             error = if ($itemResult.success) { $null } else { $itemResult.error }
         })
+        $completed++
+        Write-WingetProgress (10 + [math]::Floor(($completed / $uniqueIds.Count) * 85)) "正在处理软件包" "$completed / $($uniqueIds.Count)"
     }
 
     $succeeded = @($results | Where-Object { $_.success }).Count
@@ -263,12 +291,15 @@ try {
     $requestJson = $utf8.GetString([Convert]::FromBase64String($RequestBase64))
     $request = ConvertFrom-Json $requestJson
     $payload = $request.payload
+    Write-WingetProgress 3 "正在准备 WinGet 任务"
 
     switch ([string]$request.action) {
         "winget_get_status" {
+            Write-WingetProgress 30 "正在检查 WinGet 可用性"
             $response = New-WorkerResponse -success $true -data (Get-WingetStatus)
         }
         "winget_get_packages" {
+            Write-WingetProgress 20 "正在加载软件清单" ([string]$payload.mode)
             $mode = [string]$payload.mode
             if ($mode -notin @("installed", "updates")) { $mode = "installed" }
             $result = Get-WingetPackages -mode $mode
@@ -276,11 +307,13 @@ try {
             else { $response = New-WorkerResponse -success $false -errorMessage $result.error }
         }
         "winget_search" {
+            Write-WingetProgress 20 "正在搜索软件源" ([string]$payload.query)
             $result = Search-WingetPackages -query ([string]$payload.query)
             if ($result.success) { $response = New-WorkerResponse -success $true -data $result }
             else { $response = New-WorkerResponse -success $false -errorMessage $result.error }
         }
         "winget_package_action" {
+            Write-WingetProgress 15 "正在执行软件操作" ([string]$payload.packageId)
             $result = Invoke-WingetPackageOperation -operation ([string]$payload.operation) -packageId ([string]$payload.packageId)
             if ($result.success) { $response = New-WorkerResponse -success $true -data $result }
             else { $response = New-WorkerResponse -success $false -errorMessage $result.error }
@@ -299,5 +332,6 @@ catch {
     $response = New-WorkerResponse -success $false -errorMessage $_.Exception.Message
 }
 
-$responseJson = ConvertTo-Json -InputObject $response -Compress -Depth 10
-[Console]::Out.Write($responseJson)
+Write-WingetProgress 100 "WinGet 任务已完成"
+$response["event"] = "result"
+Write-WingetWorkerEvent $response

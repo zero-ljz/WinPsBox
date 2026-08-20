@@ -8,12 +8,19 @@
 // ==========================================
 const IPC = {
   callbacks: new Map(),
+  mockTasks: new Map(),
   mockTcpSessions: new Map(),
   mockPortProxyRules: [
     { listenAddress: '0.0.0.0', listenPort: 13389, connectAddress: '172.31.220.80', connectPort: 3389 }
   ],
   reqCounter: 0,
   isWebView: Boolean(window.chrome && window.chrome.webview),
+  backgroundActions: new Set([
+    'net_check_remote_port', 'net_ping', 'net_dns_deep_diagnostic', 'net_intel_lookup',
+    'diag_run', 'ssh_get_status', 'ssh_install_capability', 'wsl_get_status',
+    'wsl_get_online', 'net_get_portproxy_targets', 'net_scan_lan', 'net_check_ssl',
+    'net_trace_route'
+  ]),
 
   init() {
     if (this.isWebView) {
@@ -27,14 +34,32 @@ const IPC = {
             return;
           }
         }
-        if (msg && msg.id && this.callbacks.has(msg.id)) {
-          const { resolve, reject } = this.callbacks.get(msg.id);
-          this.callbacks.delete(msg.id);
-          if (msg.success) {
-            resolve(msg.data);
-          } else {
-            reject(new Error(msg.error || 'IPC call failed'));
+        if (!msg || !msg.id || !this.callbacks.has(msg.id)) return;
+
+        const callback = this.callbacks.get(msg.id);
+        if (msg.event === 'started' || msg.event === 'progress') {
+          callback.started = true;
+          callback.taskId = msg.taskId || msg.id;
+          const progress = msg.progress || {};
+          if (typeof callback.onProgress === 'function') callback.onProgress(progress);
+          if (window.TaskActivity) {
+            if (msg.event === 'started') window.TaskActivity.start(callback.taskId, callback.action, progress);
+            else window.TaskActivity.update(callback.taskId, progress);
           }
+          return;
+        }
+
+        this.callbacks.delete(msg.id);
+        clearTimeout(callback.timeoutId);
+        if (callback.started && window.TaskActivity) {
+          window.TaskActivity.finish(callback.taskId || msg.id, Boolean(msg.success), Boolean(msg.cancelled));
+        }
+        if (msg.success) {
+          callback.resolve(msg.data);
+        } else {
+          const error = new Error(msg.error || 'IPC call failed');
+          error.cancelled = Boolean(msg.cancelled);
+          callback.reject(error);
         }
       });
     } else {
@@ -42,14 +67,45 @@ const IPC = {
     }
   },
 
-  send(action, payload = {}) {
-    return new Promise((resolve, reject) => {
-      const id = 'req_' + (++this.reqCounter) + '_' + Date.now();
+  isBackgroundAction(action) {
+    return action.startsWith('winget_') || this.backgroundActions.has(action);
+  },
+
+  send(action, payload = {}, options = {}) {
+    const id = 'req_' + (++this.reqCounter) + '_' + Date.now();
+    const promise = new Promise((resolve, reject) => {
       if (!this.isWebView) {
-        this.mockHandle(action, payload, resolve, reject);
+        const isBackground = this.isBackgroundAction(action);
+        const finishMock = (success, value) => {
+          this.mockTasks.delete(id);
+          if (isBackground && window.TaskActivity) window.TaskActivity.finish(id, success, false);
+          if (success) resolve(value);
+          else reject(value);
+        };
+        if (isBackground && window.TaskActivity) {
+          window.TaskActivity.start(id, action, { percent: 5, message: '正在准备模拟任务', detail: '' });
+        }
+        const timer = this.mockHandle(
+          action,
+          payload,
+          value => finishMock(true, value),
+          error => finishMock(false, error),
+          options
+        );
+        if (isBackground) this.mockTasks.set(id, { timer, reject });
         return;
       }
-      this.callbacks.set(id, { resolve, reject });
+
+      const callback = {
+        resolve,
+        reject,
+        action,
+        onProgress: options.onProgress,
+        started: false,
+        taskId: id,
+        timeoutId: null
+      };
+      this.callbacks.set(id, callback);
       window.chrome.webview.postMessage({ id, action, payload });
 
       // Timeout safeguard
@@ -62,18 +118,48 @@ const IPC = {
         : (action.startsWith('winget_') || action.startsWith('cert_') || action.startsWith('diag_') || action.startsWith('wsl_') || action === 'net_ping' || action === 'net_check_remote_port' || action === 'net_trace_route' || action === 'net_scan_lan' || action === 'net_dns_deep_diagnostic' || action === 'net_intel_lookup' || action === 'net_get_portproxy_targets')
           ? 60000
           : 15000;
-      setTimeout(() => {
+      callback.timeoutId = setTimeout(() => {
         if (this.callbacks.has(id)) {
           this.callbacks.delete(id);
+          if (callback.started) {
+            if (window.TaskActivity) window.TaskActivity.finish(callback.taskId, false, false);
+            this.cancel(callback.taskId).catch(() => {});
+          }
           reject(new Error(`IPC Timeout for action: ${action}`));
         }
       }, timeoutMs);
     });
+
+    promise.requestId = id;
+    promise.cancel = () => this.cancel(id);
+    return promise;
   },
 
-  mockHandle(action, payload, resolve, reject) {
-    setTimeout(() => {
+  cancel(taskId) {
+    if (!taskId) return Promise.reject(new Error('Task ID is required.'));
+    if (!this.isWebView) {
+      const task = this.mockTasks.get(taskId);
+      if (!task) return Promise.resolve({ success: false, taskId });
+      clearTimeout(task.timer);
+      this.mockTasks.delete(taskId);
+      const error = new Error('任务已取消。');
+      error.cancelled = true;
+      task.reject(error);
+      if (window.TaskActivity) window.TaskActivity.finish(taskId, false, true);
+      return Promise.resolve({ success: true, taskId });
+    }
+    return this.send('task_cancel', { taskId });
+  },
+
+  mockHandle(action, payload, resolve, reject, options = {}) {
+    if (this.isBackgroundAction(action) && typeof options.onProgress === 'function') {
+      options.onProgress({ percent: 25, message: '正在处理', detail: '' });
+    }
+    return setTimeout(() => {
       switch (action) {
+        case 'task_cancel':
+          resolve({ success: true, taskId: payload.taskId });
+          break;
         case 'get_autostart':
           resolve({ enabled: localStorage.getItem('mock_autostart') === 'true' });
           break;
@@ -750,7 +836,7 @@ const IPC = {
         default:
           resolve({ success: true });
       }
-    }, 60);
+    }, this.isBackgroundAction(action) ? 3000 : 60);
   }
 };
 

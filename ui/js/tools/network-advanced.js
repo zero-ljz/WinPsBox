@@ -447,8 +447,9 @@ const LanScannerTool = {
       Toast.show(`局域网扫描完成，发现 ${this.devices.length} 台设备`, 'success');
       this.renderTable();
     } catch (e) {
-      if (statusText) statusText.textContent = '扫描失败';
-      if (tbody) tbody.innerHTML = `<tr><td colspan="7" class="text-center text-danger py-4">扫描发生异常: ${e.message}</td></tr>`;
+      const cancelled = Boolean(e.cancelled);
+      if (statusText) statusText.textContent = cancelled ? '扫描已取消' : '扫描失败';
+      if (tbody) tbody.innerHTML = `<tr><td colspan="7" class="text-center ${cancelled ? 'text-muted' : 'text-danger'} py-4">${cancelled ? '局域网扫描已取消' : `扫描发生异常: ${e.message}`}</td></tr>`;
     } finally {
       this.isScanning = false;
       if (btnScan) btnScan.disabled = false;
@@ -584,10 +585,11 @@ const SslCheckerTool = {
       this.renderResult(data);
     } catch (e) {
       if (mount) {
+        const cancelled = Boolean(e.cancelled);
         mount.innerHTML = `
-          <div class="alert alert-danger d-flex align-items-center gap-2 m-3">
-            <i data-lucide="alert-circle"></i>
-            <div><strong>检测失败：</strong>${e.message}</div>
+          <div class="alert ${cancelled ? 'alert-secondary' : 'alert-danger'} d-flex align-items-center gap-2 m-3">
+            <i data-lucide="${cancelled ? 'circle-slash-2' : 'alert-circle'}"></i>
+            <div><strong>${cancelled ? '检测已取消' : '检测失败：'}</strong>${cancelled ? '' : e.message}</div>
           </div>
         `;
         if (window.lucide) lucide.createIcons({ root: mount });
@@ -1013,7 +1015,8 @@ const RouteTracerTool = {
       const res = await IPC.send('net_trace_route', { host, maxHops: 20, timeoutMs: 800 });
       this.renderTraceHops(res);
     } catch (e) {
-      if (container) container.innerHTML = `<div class="text-danger py-4 text-center">路由追踪失败: ${e.message}</div>`;
+      const cancelled = Boolean(e.cancelled);
+      if (container) container.innerHTML = `<div class="${cancelled ? 'text-muted' : 'text-danger'} py-4 text-center">${cancelled ? '路由追踪已取消' : `路由追踪失败: ${e.message}`}</div>`;
     } finally {
       if (btn) btn.disabled = false;
     }

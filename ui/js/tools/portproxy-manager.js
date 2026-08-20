@@ -245,8 +245,8 @@ const PortProxyManagerTool = {
     } catch (error) {
       this.targetCandidates = [];
       datalist.innerHTML = '';
-      status.textContent = '自动发现失败，仍可手动输入 IPv4';
-      status.classList.add('is-error');
+      status.textContent = error.cancelled ? '自动发现已取消，仍可手动输入 IPv4' : '自动发现失败，仍可手动输入 IPv4';
+      status.classList.toggle('is-error', !error.cancelled);
     } finally {
       button.disabled = false;
     }
