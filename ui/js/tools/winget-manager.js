@@ -253,7 +253,7 @@ const WingetManagerTool = {
     if (resultCount) resultCount.textContent = `${items.length} 项`;
     this.syncSelectionControls();
     this.updateSelectionBar();
-    if (window.lucide) lucide.createIcons({ root: body });
+    if (body && window.lucide) lucide.createIcons({ root: body });
   },
 
   renderRow(item, isSearch) {
@@ -508,7 +508,7 @@ const WingetManagerTool = {
     const version = document.getElementById('wingetVersion');
     if (version && !this.status?.available) version.textContent = '不可用';
     if (body) body.innerHTML = `<tr><td colspan="7"><div class="winget-empty-state error"><i data-lucide="triangle-alert"></i><span>${this.escape(message)}</span></div></td></tr>`;
-    if (window.lucide) lucide.createIcons({ root: body });
+    if (body && window.lucide) lucide.createIcons({ root: body });
   }
 };
 

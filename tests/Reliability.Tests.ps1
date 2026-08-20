@@ -73,3 +73,77 @@ Describe "Background task event transport" {
         }
     }
 }
+
+Describe "Backend input validation and safe persistence" {
+    BeforeEach {
+        $script:AppRoot = $TestDrive
+        . (Join-Path $repoRoot "powershell\Common.ps1")
+        $script:hostsPath = Join-Path $TestDrive "hosts"
+        [System.IO.File]::WriteAllText($script:hostsPath, "127.0.0.1 localhost`n", (New-Object System.Text.UTF8Encoding($false)))
+        . (Join-Path $repoRoot "powershell\SystemTools.ps1")
+        . (Join-Path $repoRoot "powershell\NetworkTools.ps1")
+        . (Join-Path $repoRoot "powershell\DeveloperAdminTools.ps1")
+    }
+
+    It "rejects an empty Hosts payload without changing the file" {
+        $before = [System.IO.File]::ReadAllText($script:hostsPath)
+
+        $result = Save-HostsInfo -content ""
+
+        $result.success | Should Be $false
+        [System.IO.File]::ReadAllText($script:hostsPath) | Should Be $before
+        Test-Path "$($script:hostsPath).winpsbox.bak" | Should Be $false
+    }
+
+    It "backs up and verifies a valid Hosts write" {
+        $before = [System.IO.File]::ReadAllText($script:hostsPath)
+        $updated = "127.0.0.1 localhost`n127.0.0.1 winpsbox-e2e.local`n"
+
+        $result = Save-HostsInfo -content $updated
+
+        $result.success | Should Be $true
+        [System.IO.File]::ReadAllText($script:hostsPath) | Should Be $updated
+        [System.IO.File]::ReadAllText("$($script:hostsPath).winpsbox.bak") | Should Be $before
+    }
+
+    It "rejects unknown service actions before requesting elevation" {
+        $result = Set-WinServiceStatus -serviceName "__WINPSBOX_E2E_MISSING__" -action "invalid"
+
+        $result.success | Should Be $false
+        [string]::IsNullOrWhiteSpace([string]$result.error) | Should Be $false
+    }
+
+    It "accepts JSON Int64 port values" {
+        $listener = New-Object System.Net.Sockets.TcpListener([System.Net.IPAddress]::Loopback, 0)
+        $listener.Start()
+        try {
+            $port = ([System.Net.IPEndPoint]$listener.LocalEndpoint).Port
+            $payload = ConvertFrom-Json (ConvertTo-Json @{ ports = @($port) } -Compress)
+
+            $results = @(Test-RemotePorts -hostName "127.0.0.1" -ports ($payload.ports) -timeoutMs 1000)
+
+            $results.Count | Should Be 1
+            $results[0].port | Should Be $port
+            $results[0].isOpen | Should Be $true
+        }
+        finally {
+            $listener.Stop()
+        }
+    }
+
+    It "passes an empty passphrase to ssh-keygen correctly" {
+        if (-not (Get-Command ssh-keygen.exe -ErrorAction SilentlyContinue)) { return }
+        $originalUserProfile = $env:USERPROFILE
+        $env:USERPROFILE = $TestDrive
+        try {
+            $result = New-OpenSshKey -algorithm "ed25519" -keyName "winpsbox-e2e" -comment "WinPsBox E2E"
+
+            $result.success | Should Be $true
+            Test-Path (Join-Path $TestDrive ".ssh\winpsbox-e2e") | Should Be $true
+            Test-Path (Join-Path $TestDrive ".ssh\winpsbox-e2e.pub") | Should Be $true
+        }
+        finally {
+            $env:USERPROFILE = $originalUserProfile
+        }
+    }
+}

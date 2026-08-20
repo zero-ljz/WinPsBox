@@ -63,6 +63,12 @@ function Get-EnvVarList {
 }
 
 function Set-EnvVar([string]$name, [string]$value, [string]$scope = "User") {
+    if ([string]::IsNullOrWhiteSpace($name) -or $name.Contains("=") -or $name.Contains([char]0)) {
+        return @{ success = $false; error = "Invalid environment variable name." }
+    }
+    if ($scope -notin @("User", "Machine")) {
+        return @{ success = $false; error = "Invalid environment variable scope." }
+    }
     $target = if ($scope -eq "Machine") { [System.EnvironmentVariableTarget]::Machine } else { [System.EnvironmentVariableTarget]::User }
     try {
         [System.Environment]::SetEnvironmentVariable($name, $value, $target)
@@ -70,8 +76,9 @@ function Set-EnvVar([string]$name, [string]$value, [string]$scope = "User") {
     }
     catch {
         if ($scope -eq "Machine" -and -not (Test-IsAdmin)) {
-            $escapedValue = $value.Replace("`"", "```"").Replace("'", "''")
-            $cmd = "[System.Environment]::SetEnvironmentVariable('$name', '$escapedValue', [System.EnvironmentVariableTarget]::Machine)"
+            $escapedName = $name.Replace("'", "''")
+            $escapedValue = $value.Replace("'", "''")
+            $cmd = "[System.Environment]::SetEnvironmentVariable('$escapedName', '$escapedValue', [System.EnvironmentVariableTarget]::Machine)"
             $elevatedRes = Invoke-ElevatedCommand -scriptBlockText $cmd
             if ($elevatedRes.success) {
                 return @{ success = $true; message = "Environment variable saved via elevated UAC administrator." }
@@ -84,6 +91,12 @@ function Set-EnvVar([string]$name, [string]$value, [string]$scope = "User") {
 }
 
 function Delete-EnvVar([string]$name, [string]$scope = "User") {
+    if ([string]::IsNullOrWhiteSpace($name) -or $name.Contains("=") -or $name.Contains([char]0)) {
+        return @{ success = $false; error = "Invalid environment variable name." }
+    }
+    if ($scope -notin @("User", "Machine")) {
+        return @{ success = $false; error = "Invalid environment variable scope." }
+    }
     $target = if ($scope -eq "Machine") { [System.EnvironmentVariableTarget]::Machine } else { [System.EnvironmentVariableTarget]::User }
     try {
         [System.Environment]::SetEnvironmentVariable($name, $null, $target)
@@ -91,7 +104,8 @@ function Delete-EnvVar([string]$name, [string]$scope = "User") {
     }
     catch {
         if ($scope -eq "Machine" -and -not (Test-IsAdmin)) {
-            $cmd = "[System.Environment]::SetEnvironmentVariable('$name', `$null, [System.EnvironmentVariableTarget]::Machine)"
+            $escapedName = $name.Replace("'", "''")
+            $cmd = "[System.Environment]::SetEnvironmentVariable('$escapedName', `$null, [System.EnvironmentVariableTarget]::Machine)"
             $elevatedRes = Invoke-ElevatedCommand -scriptBlockText $cmd
             if ($elevatedRes.success) {
                 return @{ success = $true; message = "Environment variable deleted via elevated UAC administrator." }
@@ -103,14 +117,19 @@ function Delete-EnvVar([string]$name, [string]$scope = "User") {
     }
 }
 
-function Kill-ProcessById([int]$pid) {
+function Kill-ProcessById([int]$processId) {
+    if ($processId -le 0) { return @{ success = $false; error = "进程 ID 必须是正整数" } }
+    if ($processId -eq $PID) { return @{ success = $false; error = "不能终止 WinPsBox 自身进程" } }
+    if (-not (Get-Process -Id $processId -ErrorAction SilentlyContinue)) {
+        return @{ success = $false; error = "指定进程不存在" }
+    }
     try {
-        Stop-Process -Id $pid -Force -ErrorAction Stop
+        Stop-Process -Id $processId -Force -ErrorAction Stop
         return @{ success = $true; message = "进程已终止" }
     }
     catch {
         if (-not (Test-IsAdmin)) {
-            $cmd = "Stop-Process -Id $pid -Force -ErrorAction Stop"
+            $cmd = "Stop-Process -Id $processId -Force -ErrorAction Stop"
             $elevatedRes = Invoke-ElevatedCommand -scriptBlockText $cmd
             if ($elevatedRes.success) {
                 return @{ success = $true; message = "进程已通过管理员权限终止" }
@@ -124,10 +143,10 @@ function Kill-ProcessById([int]$pid) {
 
 function Get-HostsInfo {
     try {
-        $content = [System.IO.File]::ReadAllText($hostsPath, [System.Text.Encoding]::UTF8)
+        $content = [System.IO.File]::ReadAllText($script:hostsPath, [System.Text.Encoding]::UTF8)
         return @{
             success = $true
-            path = $hostsPath
+            path = $script:hostsPath
             content = $content
             isAdmin = (Test-IsAdmin)
         }
@@ -135,7 +154,7 @@ function Get-HostsInfo {
     catch {
         return @{
             success = $false
-            path = $hostsPath
+            path = $script:hostsPath
             error = $_.Exception.Message
             isAdmin = (Test-IsAdmin)
         }
@@ -143,27 +162,57 @@ function Get-HostsInfo {
 }
 
 function Save-HostsInfo([string]$content) {
-    try {
-        [System.IO.File]::WriteAllText($hostsPath, $content, [System.Text.Encoding]::UTF8)
-        return @{ success = $true; message = "Hosts saved successfully." }
+    if ([string]::IsNullOrWhiteSpace($content)) {
+        return @{ success = $false; error = "Hosts content cannot be empty." }
     }
-    catch {
-        $tmpFile = [System.IO.Path]::GetTempFileName()
+    if ($content.IndexOf([char]0) -ge 0) {
+        return @{ success = $false; error = "Hosts content contains invalid null characters." }
+    }
+
+    $utf8 = New-Object System.Text.UTF8Encoding($false)
+    if ($utf8.GetByteCount($content) -gt 1048576) {
+        return @{ success = $false; error = "Hosts content exceeds the 1 MB safety limit." }
+    }
+
+    $tmpFile = [System.IO.Path]::GetTempFileName()
+    $backupPath = "$($script:hostsPath).winpsbox.bak"
+    try {
+        [System.IO.File]::WriteAllText($tmpFile, $content, $utf8)
         try {
-            [System.IO.File]::WriteAllText($tmpFile, $content, [System.Text.Encoding]::UTF8)
-            $cmd = "Copy-Item -Path '$tmpFile' -Destination '$hostsPath' -Force; Remove-Item -Path '$tmpFile' -Force -ErrorAction SilentlyContinue"
+            Copy-Item -LiteralPath $script:hostsPath -Destination $backupPath -Force -ErrorAction Stop
+            Copy-Item -LiteralPath $tmpFile -Destination $script:hostsPath -Force -ErrorAction Stop
+            $written = [System.IO.File]::ReadAllText($script:hostsPath, [System.Text.Encoding]::UTF8)
+            if ($written -ne $content) {
+                Copy-Item -LiteralPath $backupPath -Destination $script:hostsPath -Force -ErrorAction SilentlyContinue
+                throw "Hosts verification failed after writing."
+            }
+            return @{ success = $true; message = "Hosts saved successfully."; backupPath = $backupPath }
+        }
+        catch {
+            $safeTemp = $tmpFile.Replace("'", "''")
+            $safeHosts = $script:hostsPath.Replace("'", "''")
+            $safeBackup = $backupPath.Replace("'", "''")
+            $cmd = @"
+`$ErrorActionPreference = 'Stop'
+Copy-Item -LiteralPath '$safeHosts' -Destination '$safeBackup' -Force
+Copy-Item -LiteralPath '$safeTemp' -Destination '$safeHosts' -Force
+if ((Get-FileHash -LiteralPath '$safeTemp' -Algorithm SHA256).Hash -ne (Get-FileHash -LiteralPath '$safeHosts' -Algorithm SHA256).Hash) {
+    Copy-Item -LiteralPath '$safeBackup' -Destination '$safeHosts' -Force
+    throw 'Hosts verification failed after writing.'
+}
+"@
             $elevatedRes = Invoke-ElevatedCommand -scriptBlockText $cmd
             if ($elevatedRes.success) {
-                return @{ success = $true; message = "Hosts saved successfully via elevated UAC administrator." }
-            } else {
-                return @{ success = $false; error = "Save failed: $($elevatedRes.error)" }
+                return @{ success = $true; message = "Hosts saved successfully via elevated UAC administrator."; backupPath = $backupPath }
             }
+            return @{ success = $false; error = "Save failed: $($elevatedRes.error)" }
         }
-        finally {
-            if (Test-Path $tmpFile) {
-                Remove-Item -Path $tmpFile -Force -ErrorAction SilentlyContinue
-            }
-        }
+    }
+    catch {
+        return @{ success = $false; error = $_.Exception.Message }
+    }
+    finally {
+        Remove-Item -LiteralPath $tmpFile -Force -ErrorAction SilentlyContinue
     }
 }
 
@@ -201,22 +250,28 @@ function Get-WinServiceList {
 }
 
 function Set-WinServiceStatus([string]$serviceName, [string]$action) {
+    if ([string]::IsNullOrWhiteSpace($serviceName)) { return @{ success = $false; error = "服务名称不能为空" } }
+    if ($action -notin @("start", "stop", "restart")) { return @{ success = $false; error = "不支持的服务操作" } }
+    $service = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
+    if (-not $service) { return @{ success = $false; error = "指定服务不存在" } }
+
     try {
         if ($action -eq "start") {
-            Start-Service -Name $serviceName -ErrorAction Stop
+            Start-Service -InputObject $service -ErrorAction Stop
         } elseif ($action -eq "stop") {
-            Stop-Service -Name $serviceName -Force -ErrorAction Stop
+            Stop-Service -InputObject $service -Force -ErrorAction Stop
         } elseif ($action -eq "restart") {
-            Restart-Service -Name $serviceName -Force -ErrorAction Stop
+            Restart-Service -InputObject $service -Force -ErrorAction Stop
         }
         return @{ success = $true; message = "服务操作成功" }
     }
     catch {
         if (-not (Test-IsAdmin)) {
+            $safeServiceName = $serviceName.Replace("'", "''")
             $psCmd = switch ($action) {
-                "start" { "Start-Service -Name '$serviceName' -ErrorAction Stop" }
-                "stop" { "Stop-Service -Name '$serviceName' -Force -ErrorAction Stop" }
-                "restart" { "Restart-Service -Name '$serviceName' -Force -ErrorAction Stop" }
+                "start" { "Start-Service -Name '$safeServiceName' -ErrorAction Stop" }
+                "stop" { "Stop-Service -Name '$safeServiceName' -Force -ErrorAction Stop" }
+                "restart" { "Restart-Service -Name '$safeServiceName' -Force -ErrorAction Stop" }
             }
             $elevated = Invoke-ElevatedCommand -scriptBlockText $psCmd
             if ($elevated.success) {
@@ -230,13 +285,19 @@ function Set-WinServiceStatus([string]$serviceName, [string]$action) {
 }
 
 function Set-WinServiceStartMode([string]$serviceName, [string]$startType) {
+    if ([string]::IsNullOrWhiteSpace($serviceName)) { return @{ success = $false; error = "服务名称不能为空" } }
+    if ($startType -notin @("Automatic", "Manual", "Disabled")) { return @{ success = $false; error = "不支持的服务启动类型" } }
+    $service = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
+    if (-not $service) { return @{ success = $false; error = "指定服务不存在" } }
+
     try {
-        Set-Service -Name $serviceName -StartupType $startType -ErrorAction Stop
+        Set-Service -InputObject $service -StartupType $startType -ErrorAction Stop
         return @{ success = $true; message = "服务启动类型已更新" }
     }
     catch {
         if (-not (Test-IsAdmin)) {
-            $cmd = "Set-Service -Name '$serviceName' -StartupType '$startType' -ErrorAction Stop"
+            $safeServiceName = $serviceName.Replace("'", "''")
+            $cmd = "Set-Service -Name '$safeServiceName' -StartupType '$startType' -ErrorAction Stop"
             $elevated = Invoke-ElevatedCommand -scriptBlockText $cmd
             if ($elevated.success) {
                 return @{ success = $true; message = "已通过管理员权限成功更新服务启动类型" }

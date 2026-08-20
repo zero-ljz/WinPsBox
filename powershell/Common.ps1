@@ -92,7 +92,7 @@ public class RestartManagerWrapper
 # ----------------- Helper Functions -----------------
 $AppName = "PwshToolboxApp"
 $RunKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
-$hostsPath = "$env:SystemRoot\System32\drivers\etc\hosts"
+$script:hostsPath = "$env:SystemRoot\System32\drivers\etc\hosts"
 
 function Write-AppTaskProgress([int]$percent, [string]$message, [string]$detail = "") {
     if ($script:AppTaskProgressWriter) {

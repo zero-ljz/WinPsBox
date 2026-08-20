@@ -46,30 +46,26 @@ function Test-RemotePorts($hostName, $ports, [int]$timeoutMs = 1200) {
     Write-AppTaskProgress 8 "正在校验端口列表" $hostName
     $portList = [System.Collections.Generic.List[int]]::new()
     foreach ($p in $ports) {
-        if ($p -is [int]) {
-            if ($p -gt 0 -and $p -le 65535) { $portList.Add($p) }
-        }
-        elseif ($p -is [string]) {
-            $pStr = [string]$p
-            if ($pStr -match '^(\d+)[-~](\d+)$') {
-                $start = [int]$matches[1]
-                $end = [int]$matches[2]
-                $minP = [math]::Min($start, $end)
-                $maxP = [math]::Max($start, $end)
-                for ($k = $minP; $k -le $maxP; $k++) {
-                    if ($k -gt 0 -and $k -le 65535) { $portList.Add($k) }
-                }
+        if ($null -eq $p) { continue }
+        $pStr = ([string]$p).Trim()
+        if ($pStr -match '^(\d+)[-~](\d+)$') {
+            $start = [int]$matches[1]
+            $end = [int]$matches[2]
+            $minP = [math]::Min($start, $end)
+            $maxP = [math]::Max($start, $end)
+            for ($k = $minP; $k -le $maxP; $k++) {
+                if ($k -gt 0 -and $k -le 65535) { $portList.Add($k) }
             }
-            else {
-                $pNum = 0
-                if ([int]::TryParse($pStr, [ref]$pNum)) {
-                    if ($pNum -gt 0 -and $pNum -le 65535) { $portList.Add($pNum) }
-                }
+        }
+        else {
+            $pNum = 0
+            if ([int]::TryParse($pStr, [ref]$pNum) -and $pNum -gt 0 -and $pNum -le 65535) {
+                $portList.Add($pNum)
             }
         }
     }
 
-    $uniquePorts = ($portList | Select-Object -Unique | Sort-Object)
+    $uniquePorts = @($portList | Select-Object -Unique | Sort-Object)
     if ($uniquePorts.Count -gt 5000) {
         $uniquePorts = $uniquePorts[0..4999]
     }
@@ -291,6 +287,19 @@ function Get-NetAdapterAndDns {
 }
 
 function Set-NetAdapterDnsConfig([string]$interfaceAlias, [string[]]$dnsServers, [bool]$isDhcp = $false) {
+    if ([string]::IsNullOrWhiteSpace($interfaceAlias) -or -not (Get-NetAdapter -InterfaceAlias $interfaceAlias -ErrorAction SilentlyContinue)) {
+        return @{ success = $false; error = "指定网卡不存在。" }
+    }
+    if (-not $isDhcp) {
+        if (-not $dnsServers -or $dnsServers.Count -eq 0) { return @{ success = $false; error = "请至少提供一个 DNS 服务器地址。" } }
+        foreach ($server in $dnsServers) {
+            $parsedServer = $null
+            if (-not [System.Net.IPAddress]::TryParse([string]$server, [ref]$parsedServer)) {
+                return @{ success = $false; error = "DNS 服务器地址格式无效。" }
+            }
+        }
+    }
+
     try {
         if ($isDhcp -or -not $dnsServers -or $dnsServers.Count -eq 0) {
             Set-DnsClientServerAddress -InterfaceAlias $interfaceAlias -ResetServerAddresses -ErrorAction Stop
@@ -302,11 +311,12 @@ function Set-NetAdapterDnsConfig([string]$interfaceAlias, [string[]]$dnsServers,
     }
     catch {
         if (-not (Test-IsAdmin)) {
+            $safeInterfaceAlias = $interfaceAlias.Replace("'", "''")
             $cmd = if ($isDhcp) {
-                "Set-DnsClientServerAddress -InterfaceAlias '$interfaceAlias' -ResetServerAddresses -ErrorAction Stop"
+                "Set-DnsClientServerAddress -InterfaceAlias '$safeInterfaceAlias' -ResetServerAddresses -ErrorAction Stop"
             } else {
-                $dnsStr = ($dnsServers | ForEach-Object { "'$_'" }) -join ","
-                "Set-DnsClientServerAddress -InterfaceAlias '$interfaceAlias' -ServerAddresses @($dnsStr) -ErrorAction Stop"
+                $dnsStr = ($dnsServers | ForEach-Object { "'$(([string]$_).Replace("'", "''"))'" }) -join ","
+                "Set-DnsClientServerAddress -InterfaceAlias '$safeInterfaceAlias' -ServerAddresses @($dnsStr) -ErrorAction Stop"
             }
             $elevated = Invoke-ElevatedCommand -scriptBlockText $cmd
             if ($elevated.success) {
@@ -320,6 +330,23 @@ function Set-NetAdapterDnsConfig([string]$interfaceAlias, [string[]]$dnsServers,
 }
 
 function Set-NetAdapterIpConfig([string]$interfaceAlias, [bool]$isDhcp, [string]$ip = "", [int]$prefixLength = 24, [string]$gateway = "") {
+    if ([string]::IsNullOrWhiteSpace($interfaceAlias) -or -not (Get-NetAdapter -InterfaceAlias $interfaceAlias -ErrorAction SilentlyContinue)) {
+        return @{ success = $false; error = "指定网卡不存在。" }
+    }
+    if (-not $isDhcp) {
+        $parsedIp = $null
+        if (-not [System.Net.IPAddress]::TryParse($ip, [ref]$parsedIp) -or $parsedIp.AddressFamily -ne [System.Net.Sockets.AddressFamily]::InterNetwork) {
+            return @{ success = $false; error = "静态 IP 地址格式无效。" }
+        }
+        if ($prefixLength -lt 1 -or $prefixLength -gt 32) { return @{ success = $false; error = "IPv4 前缀长度必须介于 1 和 32 之间。" } }
+        if ($gateway) {
+            $parsedGateway = $null
+            if (-not [System.Net.IPAddress]::TryParse($gateway, [ref]$parsedGateway) -or $parsedGateway.AddressFamily -ne [System.Net.Sockets.AddressFamily]::InterNetwork) {
+                return @{ success = $false; error = "默认网关格式无效。" }
+            }
+        }
+    }
+
     try {
         if ($isDhcp) {
             Set-NetIPInterface -InterfaceAlias $interfaceAlias -Dhcp Enabled -ErrorAction Stop
@@ -338,10 +365,12 @@ function Set-NetAdapterIpConfig([string]$interfaceAlias, [bool]$isDhcp, [string]
     }
     catch {
         if (-not (Test-IsAdmin)) {
+            $safeInterfaceAlias = $interfaceAlias.Replace("'", "''")
             $cmd = if ($isDhcp) {
-                "Set-NetIPInterface -InterfaceAlias '$interfaceAlias' -Dhcp Enabled -ErrorAction Stop; Get-NetIPAddress -InterfaceAlias '$interfaceAlias' -AddressFamily IPv4 -ErrorAction SilentlyContinue | Where-Object { `$_.PrefixOrigin -eq 'Manual' } | Remove-NetIPAddress -Confirm:`$false -ErrorAction SilentlyContinue"
+                "Set-NetIPInterface -InterfaceAlias '$safeInterfaceAlias' -Dhcp Enabled -ErrorAction Stop; Get-NetIPAddress -InterfaceAlias '$safeInterfaceAlias' -AddressFamily IPv4 -ErrorAction SilentlyContinue | Where-Object { `$_.PrefixOrigin -eq 'Manual' } | Remove-NetIPAddress -Confirm:`$false -ErrorAction SilentlyContinue"
             } else {
-                "Set-NetIPInterface -InterfaceAlias '$interfaceAlias' -Dhcp Disabled -ErrorAction Stop; Get-NetIPAddress -InterfaceAlias '$interfaceAlias' -AddressFamily IPv4 -ErrorAction SilentlyContinue | Remove-NetIPAddress -Confirm:`$false -ErrorAction SilentlyContinue; New-NetIPAddress -InterfaceAlias '$interfaceAlias' -IPAddress '$ip' -PrefixLength $prefixLength -DefaultGateway '$gateway' -ErrorAction Stop"
+                $gatewayArgument = if ($gateway) { " -DefaultGateway '$gateway'" } else { "" }
+                "Set-NetIPInterface -InterfaceAlias '$safeInterfaceAlias' -Dhcp Disabled -ErrorAction Stop; Get-NetIPAddress -InterfaceAlias '$safeInterfaceAlias' -AddressFamily IPv4 -ErrorAction SilentlyContinue | Remove-NetIPAddress -Confirm:`$false -ErrorAction SilentlyContinue; New-NetIPAddress -InterfaceAlias '$safeInterfaceAlias' -IPAddress '$ip' -PrefixLength $prefixLength$gatewayArgument -ErrorAction Stop"
             }
             $elevated = Invoke-ElevatedCommand -scriptBlockText $cmd
             if ($elevated.success) {

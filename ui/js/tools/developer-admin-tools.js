@@ -215,14 +215,17 @@ const OpenSshManagerTool = {
   async load() {
     try {
       this.state = await IPC.send('ssh_get_status');
+      if (!this.root?.querySelector('#sshHeadline')) return;
       this.renderState();
     } catch (error) {
+      if (!this.root?.querySelector('#sshHeadline')) return;
       this.root.querySelector('#sshHeadline').textContent = '读取 OpenSSH 状态失败';
       this.root.querySelector('#sshSubline').textContent = error.message;
     }
   },
 
   renderState() {
+    if (!this.state || !this.root?.querySelector('#sshHeadline')) return;
     const available = this.state.sshAvailable;
     this.root.querySelector('#sshDot').className = `dev-live-dot ${available ? 'pass' : 'warn'}`;
     this.root.querySelector('#sshHeadline').textContent = available ? 'OpenSSH 客户端可用' : 'OpenSSH 客户端未安装';
@@ -297,11 +300,16 @@ const OpenSshManagerTool = {
 
   async generateKey() {
     const button = this.root.querySelector('#sshGenerate');
+    const keyName = this.root.querySelector('#sshKeyName').value.trim();
+    if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(keyName) || keyName.includes('..')) {
+      Toast.show('密钥名称仅允许字母、数字、点、下划线和连字符，且不能包含连续点', 'warning');
+      return;
+    }
     button.disabled = true;
     try {
       const result = await IPC.send('ssh_generate_key', {
         algorithm: this.root.querySelector('#sshAlgorithm').value,
-        keyName: this.root.querySelector('#sshKeyName').value.trim(),
+        keyName,
         comment: this.root.querySelector('#sshKeyComment').value.trim()
       });
       Toast.show(`密钥已生成：${result.publicPath}`, 'success', 3500);
@@ -392,14 +400,17 @@ const WslManagerTool = {
   async load() {
     try {
       this.state = await IPC.send('wsl_get_status');
+      if (!this.root?.querySelector('#wslHeadline')) return;
       this.renderState();
     } catch (error) {
+      if (!this.root?.querySelector('#wslHeadline')) return;
       this.root.querySelector('#wslHeadline').textContent = '读取 WSL 状态失败';
       this.root.querySelector('#wslSubline').textContent = error.message;
     }
   },
 
   renderState() {
+    if (!this.state || !this.root?.querySelector('#wslHeadline')) return;
     const installed = this.state.installed;
     this.root.querySelector('#wslDot').className = `dev-live-dot ${installed ? 'pass' : 'warn'}`;
     this.root.querySelector('#wslHeadline').textContent = installed ? 'WSL 可用' : 'WSL 尚未安装';

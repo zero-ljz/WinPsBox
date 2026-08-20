@@ -346,7 +346,7 @@ const PortCheckerTool = {
 
     try {
       const results = await IPC.send('net_check_remote_port', { host, ports, timeoutMs: 1200 });
-      this.remoteResults = results || [];
+      this.remoteResults = Array.isArray(results) ? results : (results ? [results] : []);
       this.renderRemoteTable();
       Toast.show(`远程端口探测完成 (共 ${this.remoteResults.length} 个端口)`, 'success', 2000);
     } catch (e) {

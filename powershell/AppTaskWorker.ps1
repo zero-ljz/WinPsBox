@@ -49,7 +49,7 @@ try {
     switch ($action) {
         "net_check_remote_port" {
             $timeout = if ($payload.timeoutMs) { [int]$payload.timeoutMs } else { 1500 }
-            $data = Test-RemotePorts -hostName ([string]$payload.host) -ports $payload.ports -timeoutMs $timeout
+            $data = @(Test-RemotePorts -hostName ([string]$payload.host) -ports ($payload.ports) -timeoutMs $timeout)
             $response = New-TaskWorkerResponse $true $data
         }
         "net_ping" {

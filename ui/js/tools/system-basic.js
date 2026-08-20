@@ -2,6 +2,13 @@
 const EnvTool = {
   activeScope: 'User', // 'User' | 'Machine' | 'PathAnalysis'
   envData: { userVars: [], machineVars: [], pathAnalysis: [] },
+  renderedVars: [],
+
+  escape(value) {
+    return String(value ?? '').replace(/[&<>"']/g, char => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    })[char]);
+  },
 
   render(container) {
     container.innerHTML = `
@@ -108,6 +115,15 @@ const EnvTool = {
     container.querySelector('#btnRefreshEnv').onclick = () => this.loadEnvVars();
     container.querySelector('#btnAddEnv').onclick = () => this.openEditModal('', '', this.activeScope === 'Machine' ? 'Machine' : 'User');
 
+    container.querySelector('#envTableBody').onclick = event => {
+      const button = event.target.closest('[data-env-action]');
+      if (!button) return;
+      const variable = this.renderedVars[Number(button.dataset.envIndex)];
+      if (!variable) return;
+      if (button.dataset.envAction === 'edit') this.openEditModal(variable.name, variable.value, variable.scope);
+      if (button.dataset.envAction === 'delete') this.deleteVar(variable.name, variable.scope);
+    };
+
     searchInput.oninput = (e) => this.renderTable(e.target.value.toLowerCase().trim());
 
     // Modal bindings
@@ -173,18 +189,20 @@ const EnvTool = {
     }
 
     if (list.length === 0) {
+      this.renderedVars = [];
       tbody.innerHTML = `<tr><td colspan="3" class="text-center text-muted py-4">未找到相关环境变量</td></tr>`;
       return;
     }
 
-    tbody.innerHTML = list.map(v => `
+    this.renderedVars = list;
+    tbody.innerHTML = list.map((v, index) => `
       <tr>
-        <td class="font-mono fw-bold text-primary">${v.name}</td>
-        <td class="font-mono text-break" style="max-width: 500px;">${v.value}</td>
+        <td class="font-mono fw-bold text-primary">${this.escape(v.name)}</td>
+        <td class="font-mono text-break" style="max-width: 500px;">${this.escape(v.value)}</td>
         <td>
           <div class="d-flex align-items-center gap-1">
-            <button class="btn btn-outline-secondary btn-sm py-0 px-2" style="font-size:0.75rem;" onclick="EnvTool.openEditModal('${v.name}', \`${v.value.replace(/`/g, '\\`').replace(/\\/g, '\\\\')}\`, '${v.scope}')">编辑</button>
-            <button class="btn btn-outline-danger btn-sm py-0 px-2" style="font-size:0.75rem;" onclick="EnvTool.deleteVar('${v.name}', '${v.scope}')">删除</button>
+            <button class="btn btn-outline-secondary btn-sm py-0 px-2" style="font-size:0.75rem;" data-env-action="edit" data-env-index="${index}">编辑</button>
+            <button class="btn btn-outline-danger btn-sm py-0 px-2" style="font-size:0.75rem;" data-env-action="delete" data-env-index="${index}">删除</button>
           </div>
         </td>
       </tr>
@@ -209,7 +227,7 @@ const EnvTool = {
       return `
         <tr>
           <td class="font-mono text-muted">#${idx + 1}</td>
-          <td class="font-mono ${item.exists ? '' : 'text-danger fw-bold'}">${item.path}</td>
+          <td class="font-mono ${item.exists ? '' : 'text-danger fw-bold'}">${this.escape(item.path)}</td>
           <td>${badge}</td>
         </tr>
       `;
@@ -254,6 +272,12 @@ const HostsTool = {
   activeTab: 'visual',
   rawContent: '',
   hostsPath: '',
+
+  escape(value) {
+    return String(value ?? '').replace(/[&<>"']/g, char => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    })[char]);
+  },
 
   render(container) {
     container.innerHTML = `
@@ -342,6 +366,15 @@ const HostsTool = {
 
     container.querySelector('#btnSaveHosts').onclick = () => this.saveHosts();
     container.querySelector('#btnBackupHosts').onclick = () => this.backupHosts();
+
+    container.querySelector('#hostsRulesTbody').onchange = event => {
+      const toggle = event.target.closest('[data-host-line]');
+      if (toggle) this.toggleRule(Number(toggle.dataset.hostLine), toggle.checked);
+    };
+    container.querySelector('#hostsRulesTbody').onclick = event => {
+      const button = event.target.closest('[data-host-delete]');
+      if (button) this.deleteRule(Number(button.dataset.hostDelete));
+    };
 
     // Modal add host
     const modal = document.getElementById('addHostModal');
@@ -436,14 +469,14 @@ const HostsTool = {
       <tr>
         <td>
           <div class="form-check form-switch m-0">
-            <input class="form-check-input" type="checkbox" role="switch" ${r.enabled ? 'checked' : ''} onchange="HostsTool.toggleRule(${r.lineIndex}, this.checked)">
+            <input class="form-check-input" type="checkbox" role="switch" ${r.enabled ? 'checked' : ''} data-host-line="${r.lineIndex}">
           </div>
         </td>
-        <td class="font-mono fw-bold">${r.ip}</td>
-        <td class="font-mono text-primary">${r.domain}</td>
-        <td class="text-muted small">${r.comment || '-'}</td>
+        <td class="font-mono fw-bold">${this.escape(r.ip)}</td>
+        <td class="font-mono text-primary">${this.escape(r.domain)}</td>
+        <td class="text-muted small">${this.escape(r.comment || '-')}</td>
         <td>
-          <button class="btn btn-outline-danger btn-sm py-0 px-2" style="font-size:0.75rem;" onclick="HostsTool.deleteRule(${r.lineIndex})">删除</button>
+          <button class="btn btn-outline-danger btn-sm py-0 px-2" style="font-size:0.75rem;" data-host-delete="${r.lineIndex}">删除</button>
         </td>
       </tr>
     `).join('');

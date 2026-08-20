@@ -263,6 +263,30 @@ function Set-OpenSshService([string]$action) {
     catch { return @{ success = $false; error = $_.Exception.Message } }
 }
 
+function ConvertTo-NativeProcessArgument([string]$value) {
+    if ($null -eq $value -or $value.Length -eq 0) { return '""' }
+    if ($value -notmatch '[\s"]') { return $value }
+
+    $builder = New-Object System.Text.StringBuilder
+    [void]$builder.Append('"')
+    $backslashCount = 0
+    foreach ($character in $value.ToCharArray()) {
+        if ($character -eq '\') { $backslashCount++; continue }
+        if ($character -eq '"') {
+            [void]$builder.Append(('\' * (($backslashCount * 2) + 1)))
+            [void]$builder.Append('"')
+        }
+        else {
+            if ($backslashCount -gt 0) { [void]$builder.Append(('\' * $backslashCount)) }
+            [void]$builder.Append($character)
+        }
+        $backslashCount = 0
+    }
+    if ($backslashCount -gt 0) { [void]$builder.Append(('\' * ($backslashCount * 2))) }
+    [void]$builder.Append('"')
+    return $builder.ToString()
+}
+
 function New-OpenSshKey([string]$algorithm, [string]$keyName, [string]$comment) {
     if ($algorithm -notin @("ed25519", "rsa")) { return @{ success = $false; error = "Unsupported key algorithm." } }
     if ($keyName -notmatch "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$" -or $keyName.Contains("..")) { return @{ success = $false; error = "Invalid key name." } }
@@ -273,11 +297,26 @@ function New-OpenSshKey([string]$algorithm, [string]$keyName, [string]$comment) 
         [System.IO.Directory]::CreateDirectory($sshFolder) | Out-Null
         $path = Join-Path $sshFolder $keyName
         if ((Test-Path $path) -or (Test-Path "$path.pub")) { return @{ success = $false; error = "A key with this name already exists." } }
-        $args = @("-t", $algorithm)
-        if ($algorithm -eq "rsa") { $args += @("-b", "4096") }
-        $args += @("-f", $path, "-N", "", "-C", $(if ($comment) { $comment } else { "$env:USERNAME@$env:COMPUTERNAME" }))
-        $output = (& $keygen.Source @args 2>&1) -join "`n"
-        if ($LASTEXITCODE -ne 0) { return @{ success = $false; error = $output } }
+        $arguments = @("-t", $algorithm)
+        if ($algorithm -eq "rsa") { $arguments += @("-b", "4096") }
+        $arguments += @("-f", $path, "-N", "", "-C", $(if ($comment) { $comment } else { "$env:USERNAME@$env:COMPUTERNAME" }))
+
+        $startInfo = New-Object System.Diagnostics.ProcessStartInfo
+        $startInfo.FileName = $keygen.Source
+        $startInfo.Arguments = (($arguments | ForEach-Object { ConvertTo-NativeProcessArgument ([string]$_) }) -join " ")
+        $startInfo.UseShellExecute = $false
+        $startInfo.CreateNoWindow = $true
+        $startInfo.RedirectStandardOutput = $true
+        $startInfo.RedirectStandardError = $true
+        $process = New-Object System.Diagnostics.Process
+        $process.StartInfo = $startInfo
+        [void]$process.Start()
+        $stdout = $process.StandardOutput.ReadToEnd()
+        $stderr = $process.StandardError.ReadToEnd()
+        $process.WaitForExit()
+        $exitCode = $process.ExitCode
+        $process.Dispose()
+        if ($exitCode -ne 0) { return @{ success = $false; error = ($stdout + $stderr).Trim() } }
         return @{ success = $true; publicPath = "$path.pub"; fingerprint = ((& $keygen.Source -lf "$path.pub" 2>$null) -join " ").Trim() }
     }
     catch { return @{ success = $false; error = $_.Exception.Message } }
@@ -396,7 +435,7 @@ function Get-WslOnlineDistributions {
     $wsl = Get-Command wsl.exe -ErrorAction SilentlyContinue
     if (-not $wsl) { return @{ success = $false; error = "wsl.exe is not installed."; items = @() } }
     try {
-        $raw = @(& $wsl.Source --list --online 2>&1 | ForEach-Object { ([string]$_).Replace([char]0, "") })
+        $raw = @(& $wsl.Source --list --online 2>&1 | ForEach-Object { ([string]$_).Replace([string][char]0, "") })
         $items = @()
         foreach ($line in $raw) {
             if ($line -match "^\s*([A-Za-z0-9][A-Za-z0-9._-]+)\s{2,}(.+?)\s*$" -and $matches[1] -notin @("NAME", "The")) {

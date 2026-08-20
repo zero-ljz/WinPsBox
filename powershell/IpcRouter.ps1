@@ -136,7 +136,7 @@ function Register-AppWebViewHandlers($webView) {
                         $hostName = [string]($payload.host)
                         $ports = $payload.ports
                         $timeout = if ($payload.timeoutMs) { [int]($payload.timeoutMs) } else { 1500 }
-                        $response.data = Test-RemotePorts -hostName $hostName -ports $ports -timeoutMs $timeout
+                        $response.data = @(Test-RemotePorts -hostName $hostName -ports $ports -timeoutMs $timeout)
                     }
                     "net_ping" {
                         $targetHost = [string]($payload.host)
@@ -346,17 +346,17 @@ function Register-AppWebViewHandlers($webView) {
                         $value = [string]($payload.value)
                         $scope = [string]($payload.scope)
                         $res = Set-EnvVar -name $name -value $value -scope $scope
-                        if (-not $res.success) { $response.success = $false; $response.error = $res.error }
+                        if ($res.success) { $response.data = $res } else { $response.success = $false; $response.error = $res.error }
                     }
                     "sys_delete_env_var" {
                         $name = [string]($payload.name)
                         $scope = [string]($payload.scope)
                         $res = Delete-EnvVar -name $name -scope $scope
-                        if (-not $res.success) { $response.success = $false; $response.error = $res.error }
+                        if ($res.success) { $response.data = $res } else { $response.success = $false; $response.error = $res.error }
                     }
                     "sys_kill_process" {
                         $pidToKill = [int]($payload.pid)
-                        $res = Kill-ProcessById -pid $pidToKill
+                        $res = Kill-ProcessById -processId $pidToKill
                         if ($res.success) { $response.data = $res } else { $response.success = $false; $response.error = $res.error }
                     }
                     "sys_get_hosts" {
