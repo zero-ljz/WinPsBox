@@ -17,6 +17,8 @@
 - **Port Inspector & Connectivity**: Inspect processes occupying local ports (PID / Name) or test TCP port reachability on remote hosts.
 - **Network Link Diagnostics**: Ping jitter & latency analysis, hop-by-hop Traceroute, and Windows IPv4 routing table viewer.
 - **Socket / WebSocket Debugger**: Real-time interactive debugger for TCP and WebSocket connections supporting Text, Hex, and Base64 payloads.
+- **Wi-Fi Analyzer**: Scan nearby wireless networks and inspect signal strength, BSSID, band, channel utilization, and authentication.
+- **HTTP Redirect Tracer**: Inspect every redirect hop, status code, Location header, latency, host transition, and HTTPS downgrade.
 - **Local CA & Cert Generator**: Create and trust local Root CAs and generate SAN HTTPS certificates for localhost, LAN IPs, and test domains.
 
 ### ⚙️ System Operations

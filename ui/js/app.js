@@ -38,6 +38,8 @@ const ToolRegistry = {
     { id: 'network-link-diagnostic', title: '网络链路诊断', category: 'network', categoryName: '网络工具', icon: 'route', desc: '统一执行 Ping 质量检测、逐跳 Traceroute 追踪并查看 Windows IPv4 路由表', tags: ['探测', '网络', '路由', 'Trace', '诊断'] },
     { id: 'socket-debugger', title: 'WebSocket / Socket 调试台', category: 'network', categoryName: '网络工具', icon: 'radio-tower', desc: '实时调试 WebSocket 与 TCP 长连接，支持文本、Hex、Base64 数据和收发帧检查', tags: ['网络', '调试', 'WebSocket', 'TCP'] },
     { id: 'local-cert-generator', title: '本地 CA 与多域名证书生成器', category: 'network', categoryName: '网络工具', icon: 'badge-check', desc: '创建并信任本地 Root CA，为 localhost、局域网 IP 与测试域名签发 SAN HTTPS 证书', tags: ['安全', '证书', 'HTTPS', '开发'] },
+    { id: 'wifi-analyzer', title: 'Wi-Fi 分析器', category: 'network', categoryName: '网络工具', icon: 'wifi', desc: '扫描附近无线网络，分析信号、频段、信道占用、认证方式与当前连接', tags: ['网络', 'Wi-Fi', '信道', '无线'] },
+    { id: 'http-redirect-tracer', title: 'HTTP 重定向追踪', category: 'network', categoryName: '网络工具', icon: 'git-commit-horizontal', desc: '逐跳检查 HTTP 重定向链、状态码、响应头、耗时、跨域与 HTTPS 降级', tags: ['网络', 'HTTP', '重定向', '开发'] },
 
     // System tools (Fully implemented)
     { id: 'service-manager', title: 'Windows 服务管理器', category: 'system', categoryName: '系统运维', icon: 'sliders', desc: '检索所有 Windows 系统服务，支持一键启动/停止/重启与修改自启动模式', tags: ['系统', '服务', '运维', 'Windows'] },
@@ -239,6 +241,12 @@ const ToolRegistry = {
           break;
         case 'local-cert-generator':
           LocalCertificateTool.render(mount);
+          break;
+        case 'wifi-analyzer':
+          WifiAnalyzerTool.render(mount);
+          break;
+        case 'http-redirect-tracer':
+          HttpRedirectTracerTool.render(mount);
           break;
         // System Tools
         case 'service-manager':

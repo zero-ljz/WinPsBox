@@ -1,4 +1,5 @@
 const assert = require('node:assert/strict');
+const http = require('node:http');
 const net = require('node:net');
 const path = require('node:path');
 
@@ -94,9 +95,9 @@ async function closeServer(server) {
         ])
       )
     }));
-    assert.equal(state.registered, 20);
+    assert.equal(state.registered, 22);
     assert.equal(state.rendered, state.registered);
-    assert.deepEqual(state.categoryCounts, { all: 20, network: 9, system: 8, developer: 3 });
+    assert.deepEqual(state.categoryCounts, { all: 22, network: 11, system: 8, developer: 3 });
     return state;
   });
 
@@ -164,7 +165,7 @@ async function closeServer(server) {
     assert.equal(await page.locator('#viewTools').isVisible(), true);
   });
 
-  await step('20 个工具均可打开并渲染真实工作区', async () => {
+  await step('22 个工具均可打开并渲染真实工作区', async () => {
     const tools = await page.evaluate(() => ToolRegistry.tools.map(tool => ({ id: tool.id, title: tool.title })));
     const rendered = [];
     for (const tool of tools) {
@@ -324,6 +325,61 @@ async function closeServer(server) {
       host: '127.0.0.1', maxHops: 3, timeoutMs: 500
     }), 'net_trace_route');
     assert.ok(Array.isArray(trace.hops));
+  });
+
+  await step('Wi-Fi 分析器返回原生 WLAN 数据并完成 UI 渲染', async () => {
+    await page.evaluate(() => ToolRegistry.openToolWorkspace('wifi-analyzer'));
+    await page.waitForFunction(() => WifiAnalyzerTool.result && Array.isArray(WifiAnalyzerTool.result.networks), null, { timeout: 90000 });
+    const state = await page.evaluate(() => ({
+      interfaces: WifiAnalyzerTool.result.interfaces.length,
+      networks: WifiAnalyzerTool.result.networks.length,
+      channels: WifiAnalyzerTool.result.channels.length,
+      visibleRows: document.querySelectorAll('#wifiNetworkList tbody tr').length,
+      placeholder: Boolean(document.querySelector('#workspaceToolMount .workspace-placeholder-box'))
+    }));
+    assert.equal(state.placeholder, false);
+    assert.ok(state.interfaces >= 0);
+    assert.ok(state.networks >= 0);
+    assert.ok(state.channels >= 0);
+    assert.equal(state.visibleRows, state.networks);
+    return state;
+  });
+
+  await step('HTTP 重定向追踪逐跳解析相对 Location', async () => {
+    const server = http.createServer((request, response) => {
+      if (request.url === '/start') {
+        response.writeHead(301, { Location: '/middle', 'X-WinPsBox-Hop': 'one' });
+        response.end();
+      } else if (request.url === '/middle') {
+        response.writeHead(302, { Location: '/final', 'X-WinPsBox-Hop': 'two' });
+        response.end();
+      } else {
+        response.writeHead(204, { 'X-WinPsBox-Final': 'yes' });
+        response.end();
+      }
+    });
+    const port = await listen(server);
+    try {
+      await page.evaluate(() => ToolRegistry.openToolWorkspace('http-redirect-tracer'));
+      await page.locator('#redirectUrl').fill(`http://127.0.0.1:${port}/start`);
+      await page.locator('#redirectRun').click();
+      await page.waitForFunction(() => HttpRedirectTracerTool.result?.hops?.length === 3, null, { timeout: 60000 });
+      const state = await page.evaluate(() => ({
+        redirectCount: HttpRedirectTracerTool.result.redirectCount,
+        statusCodes: HttpRedirectTracerTool.result.hops.map(hop => hop.statusCode),
+        finalUrl: HttpRedirectTracerTool.result.finalUrl,
+        renderedHops: document.querySelectorAll('.redirect-hop').length,
+        banner: document.querySelector('.redirect-state-banner')?.textContent || ''
+      }));
+      assert.equal(state.redirectCount, 2);
+      assert.deepEqual(state.statusCodes, [301, 302, 204]);
+      assert.match(state.finalUrl, /\/final$/);
+      assert.equal(state.renderedHops, 3);
+      assert.match(state.banner, /已到达最终响应/);
+      return state;
+    } finally {
+      await closeServer(server);
+    }
   });
 
   await step('环境变量通过 UI 创建、检索、编辑和删除可回滚', async () => {

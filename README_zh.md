@@ -18,6 +18,8 @@
 - **网络链路诊断**：集成 Ping 延迟抖动测试、逐跳 Traceroute 追踪与 Windows 路由表查询。
 - **Socket / WebSocket 调试台**：支持 TCP 与 WebSocket 长连接实时调试，支持 Text / Hex / Base64 收发。
 - **本地 CA 与证书生成器**：一键签发并信任本地 Root CA，快速生成 localhost / 局域网 HTTPS 证书。
+- **Wi-Fi 分析器**：扫描附近无线网络，集中查看信号、BSSID、频段、信道占用与认证方式。
+- **HTTP 重定向追踪**：逐跳检查状态码、Location、响应头、耗时、跨主机跳转与 HTTPS 降级。
 
 ### ⚙️ 系统运维
 - **Windows 服务管理器**：查看与检索系统服务状态，快捷启停、重启及修改自启动类型。

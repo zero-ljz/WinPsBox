@@ -14,6 +14,11 @@ vm.runInContext(`${source}\nglobalThis.__IPC = IPC;`, context);
 const IPC = context.__IPC;
 
 assert.equal(IPC.getTimeoutMs('net_check_ssl'), 30_000);
+assert.equal(IPC.getTimeoutMs('net_wifi_analyze'), 60_000);
+assert.equal(
+  IPC.getTimeoutMs('net_http_redirect_trace', { maxRedirects: 5, timeoutMs: 5_000 }),
+  90_000
+);
 assert.equal(IPC.getTimeoutMs('net_dns_deep_diagnostic'), 180_000);
 assert.equal(IPC.getTimeoutMs('ssh_install_capability'), 1_800_000);
 assert.equal(

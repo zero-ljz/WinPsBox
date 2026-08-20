@@ -29,6 +29,7 @@ function New-TaskWorkerResponse([bool]$success, $data = $null, [string]$errorMes
 . (Join-Path $script:PowerShellRoot "NetworkTools.ps1")
 . (Join-Path $script:PowerShellRoot "SystemTools.ps1")
 . (Join-Path $script:PowerShellRoot "NetworkDeveloperTools.ps1")
+. (Join-Path $script:PowerShellRoot "NetworkInspectionTools.ps1")
 . (Join-Path $script:PowerShellRoot "DeveloperAdminTools.ps1")
 
 $script:AppTaskProgressWriter = {
@@ -64,6 +65,16 @@ try {
         }
         "net_intel_lookup" {
             $result = Get-NetworkIntelligence -target ([string]$payload.target)
+            $response = if ($result.success) { New-TaskWorkerResponse $true $result } else { New-TaskWorkerResponse $false $null $result.error }
+        }
+        "net_wifi_analyze" {
+            $result = Get-WifiAnalysis
+            $response = if ($result.success) { New-TaskWorkerResponse $true $result } else { New-TaskWorkerResponse $false $null $result.error }
+        }
+        "net_http_redirect_trace" {
+            $maxRedirects = if ($payload.maxRedirects) { [int]$payload.maxRedirects } else { 10 }
+            $timeout = if ($payload.timeoutMs) { [int]$payload.timeoutMs } else { 10000 }
+            $result = Invoke-HttpRedirectTrace -url ([string]$payload.url) -method ([string]$payload.method) -maxRedirects $maxRedirects -timeoutMs $timeout
             $response = if ($result.success) { New-TaskWorkerResponse $true $result } else { New-TaskWorkerResponse $false $null $result.error }
         }
         "diag_run" {

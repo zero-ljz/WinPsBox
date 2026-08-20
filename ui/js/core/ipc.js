@@ -19,7 +19,7 @@ const IPC = {
     'net_check_remote_port', 'net_ping', 'net_dns_deep_diagnostic', 'net_intel_lookup',
     'diag_run', 'ssh_get_status', 'ssh_install_capability', 'wsl_get_status',
     'wsl_get_online', 'net_get_portproxy_targets', 'net_scan_lan', 'net_check_ssl',
-    'net_trace_route'
+    'net_trace_route', 'net_wifi_analyze', 'net_http_redirect_trace'
   ]),
 
   init() {
@@ -100,6 +100,12 @@ const IPC = {
       return Math.min(10 * 60 * 1000, Math.max(90 * 1000, maxHops * operationTimeout + 30 * 1000));
     }
     if (action === 'net_check_ssl') return 30 * 1000;
+    if (action === 'net_wifi_analyze') return 60 * 1000;
+    if (action === 'net_http_redirect_trace') {
+      const redirects = Math.max(1, Math.min(20, Number(payload.maxRedirects) || 10));
+      const operationTimeout = Math.max(1000, Math.min(30000, Number(payload.timeoutMs) || 10000));
+      return Math.min(10 * 60 * 1000, Math.max(90 * 1000, (redirects + 1) * operationTimeout + 30 * 1000));
+    }
     if (this.isBackgroundAction(action)) return 2 * 60 * 1000;
     if (action.startsWith('cert_') || action === 'sys_elevate_app') return 5 * 60 * 1000;
     if (action.startsWith('sys_set_') || action === 'sys_save_hosts' || action.startsWith('net_set_') || action.startsWith('net_add_') || action.startsWith('net_remove_')) {
@@ -462,6 +468,46 @@ const IPC = {
               { name: 'AliDNS DoH', endpoint: 'https://dns.alidns.com/resolve', success: true, status: 0, latencyMs: 48.6, answers: [{ name: 'example.com.', type: 'A', ttl: 248, value: '104.20.34.220' }], error: '' }
             ],
             diagnosedAt: new Date().toLocaleString('zh-CN', { hour12: false })
+          });
+          break;
+        case 'net_wifi_analyze':
+          resolve({
+            success: true,
+            scannedAt: new Date().toLocaleString('zh-CN', { hour12: false }),
+            interfaces: [{ id: 'mock-wifi', name: 'Intel(R) Wi-Fi 6E AX211 160MHz', state: 'Connected' }],
+            networks: [
+              { interfaceName: 'Intel(R) Wi-Fi 6E AX211 160MHz', ssid: 'Studio-5G', bssid: '34:60:F9:20:18:A1', signalQuality: 94, rssi: -33, frequencyMHz: 5180, channel: 36, band: '5 GHz', radioType: '802.11ax', authentication: 'WPA3 Personal', cipher: 'CCMP', profileName: 'Studio-5G', securityEnabled: true, connected: true, connectable: true },
+              { interfaceName: 'Intel(R) Wi-Fi 6E AX211 160MHz', ssid: 'Workshop', bssid: '68:7D:B4:11:82:20', signalQuality: 78, rssi: -58, frequencyMHz: 2437, channel: 6, band: '2.4 GHz', radioType: '802.11n', authentication: 'WPA2 Personal', cipher: 'CCMP', profileName: '', securityEnabled: true, connected: false, connectable: true },
+              { interfaceName: 'Intel(R) Wi-Fi 6E AX211 160MHz', ssid: 'Guest', bssid: '18:31:BF:AA:72:09', signalQuality: 65, rssi: -67, frequencyMHz: 5220, channel: 44, band: '5 GHz', radioType: '802.11ac', authentication: 'Open', cipher: 'None', profileName: '', securityEnabled: false, connected: false, connectable: true },
+              { interfaceName: 'Intel(R) Wi-Fi 6E AX211 160MHz', ssid: 'Office-IoT', bssid: '80:8A:8B:10:43:77', signalQuality: 51, rssi: -74, frequencyMHz: 2462, channel: 11, band: '2.4 GHz', radioType: '802.11n', authentication: 'WPA2 Personal', cipher: 'CCMP', profileName: '', securityEnabled: true, connected: false, connectable: true },
+              { interfaceName: 'Intel(R) Wi-Fi 6E AX211 160MHz', ssid: '', bssid: '92:5A:7C:08:91:ED', signalQuality: 38, rssi: -81, frequencyMHz: 2412, channel: 1, band: '2.4 GHz', radioType: '802.11ax', authentication: 'WPA3 Personal', cipher: 'CCMP', profileName: '', securityEnabled: true, connected: false, connectable: true }
+            ],
+            channels: [
+              { band: '2.4 GHz', channel: 1, accessPoints: 1, networks: 1, strongestSignal: 38 },
+              { band: '2.4 GHz', channel: 6, accessPoints: 3, networks: 2, strongestSignal: 78 },
+              { band: '2.4 GHz', channel: 11, accessPoints: 2, networks: 2, strongestSignal: 51 },
+              { band: '5 GHz', channel: 36, accessPoints: 1, networks: 1, strongestSignal: 94 },
+              { band: '5 GHz', channel: 44, accessPoints: 2, networks: 2, strongestSignal: 65 }
+            ]
+          });
+          break;
+        case 'net_http_redirect_trace':
+          resolve({
+            success: true,
+            inputUrl: payload.url,
+            finalUrl: 'https://www.example.com/docs',
+            redirectCount: 2,
+            totalElapsedMs: 184.6,
+            completed: true,
+            loopDetected: false,
+            limitReached: false,
+            downgradeDetected: false,
+            tracedAt: new Date().toLocaleString('zh-CN', { hour12: false }),
+            hops: [
+              { index: 1, url: payload.url, method: payload.method || 'HEAD', statusCode: 301, reasonPhrase: 'Moved Permanently', elapsedMs: 42.3, location: 'https://example.com/', nextMethod: payload.method || 'HEAD', hostChanged: false, schemeDowngrade: false, contentLength: 0, contentType: 'text/html', server: 'cloudflare', headers: { Location: 'https://example.com/', Server: 'cloudflare', 'Strict-Transport-Security': 'max-age=31536000' } },
+              { index: 2, url: 'https://example.com/', method: payload.method || 'HEAD', statusCode: 302, reasonPhrase: 'Found', elapsedMs: 58.1, location: 'https://www.example.com/docs', nextMethod: payload.method || 'HEAD', hostChanged: true, schemeDowngrade: false, contentLength: 0, contentType: 'text/html', server: 'nginx', headers: { Location: 'https://www.example.com/docs', Server: 'nginx', 'Cache-Control': 'no-cache' } },
+              { index: 3, url: 'https://www.example.com/docs', method: payload.method || 'HEAD', statusCode: 200, reasonPhrase: 'OK', elapsedMs: 84.2, location: '', nextMethod: payload.method || 'HEAD', hostChanged: false, schemeDowngrade: false, contentLength: 12580, contentType: 'text/html; charset=utf-8', server: 'nginx', headers: { Server: 'nginx', 'Content-Type': 'text/html; charset=utf-8', 'Content-Length': '12580' } }
+            ]
           });
           break;
         case 'net_intel_lookup': {

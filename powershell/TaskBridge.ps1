@@ -21,6 +21,8 @@ $script:backgroundAppActions = @(
     "net_ping",
     "net_dns_deep_diagnostic",
     "net_intel_lookup",
+    "net_wifi_analyze",
+    "net_http_redirect_trace",
     "diag_run",
     "ssh_get_status",
     "ssh_install_capability",
