@@ -6,7 +6,7 @@
   <title>WinPsBox - 开发者与系统管理员工具箱</title>
   <link rel="stylesheet" href="./vendor/bootstrap/bootstrap.min.css">
   <link rel="stylesheet" href="./css/base.css">
-  <link rel="stylesheet" href="./css/layout.css">
+  <link rel="stylesheet" href="./css/layout.css?v=20260820">
   <link rel="stylesheet" href="./css/tools.css">
   <link rel="stylesheet" href="./css/winget.css">
   <link rel="stylesheet" href="./css/system-utility-tools.css">
@@ -14,6 +14,7 @@
   <link rel="stylesheet" href="./css/network-developer-tools.css">
   <link rel="stylesheet" href="./css/portproxy-manager.css">
   <link rel="stylesheet" href="./css/diagnostic-suites.css">
+  <link rel="stylesheet" href="./css/developer-tools.css">
 </head>
 <body>
   <div class="app-container">
@@ -67,6 +68,15 @@
                 <span>系统运维</span>
               </span>
               <span class="nav-count-badge" id="count-system">0</span>
+            </button>
+          </li>
+          <li>
+            <button class="nav-item-btn" data-category="developer">
+              <span class="nav-item-content">
+                <i data-lucide="code-2"></i>
+                <span>开发工具</span>
+              </span>
+              <span class="nav-count-badge" id="count-developer">0</span>
             </button>
           </li>
         </ul>
@@ -143,6 +153,7 @@
               <span class="tag-chip" data-tag="安全">安全</span>
               <span class="tag-chip" data-tag="运维">运维</span>
               <span class="tag-chip" data-tag="探测">探测</span>
+              <span class="tag-chip" data-tag="开发">开发</span>
             </div>
           </div>
 
@@ -163,7 +174,7 @@
         <section id="viewWorkspace" class="view-section d-none workspace-view">
           <div class="workspace-header">
             <div class="workspace-title-group">
-              <button class="btn-back" id="btnBackToGrid">
+              <button class="btn-back" id="btnBackToGrid" aria-label="返回列表">
                 <i data-lucide="arrow-left"></i>
                 <span>返回列表</span>
               </button>
@@ -393,6 +404,8 @@
   <script src="./js/tools/winget-manager.js"></script>
   <script src="./js/tools/system-utility-tools.js"></script>
   <script src="./js/tools/diagnostic-suites.js"></script>
+  <script src="./js/tools/developer-admin-tools.js"></script>
+  <script src="./js/tools/developer-text-tools.js"></script>
   <script src="./js/app.js"></script>
 </body>
 </html>

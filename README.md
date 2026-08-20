@@ -27,6 +27,12 @@
 - **Context Menu Manager**: Inspect, enable, or disable context menu items for files, folders, and desktop background.
 - **Environment Variables**: View, search, and edit User and System PATH and environment variables cleanly.
 - **Hosts Quick Switcher**: Easily read, switch, and edit system Hosts rules with backup and restore support.
+- **Diagnostic Report Center**: Run a single system, storage, network, DNS, proxy, and service health check and export Markdown or JSON reports.
+
+### Developer Tools
+- **SSH / OpenSSH Manager**: Inspect and install Windows OpenSSH capabilities, manage `sshd`, generate user keys, and test SSH endpoints.
+- **WSL Manager**: View installed distributions, launch or terminate instances, change the default distribution, update WSL, and install online distributions.
+- **Developer Text Toolbox**: Process JSON, Base64, URLs, JWT payloads, timestamps, message digests, and UUIDs locally.
 
 ---
 

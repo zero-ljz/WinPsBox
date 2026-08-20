@@ -57,7 +57,9 @@ const IPC = {
         ? Math.max(15 * 60 * 1000, Math.min(Number(payload.packageIds?.length || 0) * 3 * 60 * 1000, 2 * 60 * 60 * 1000))
         : action === 'winget_package_action'
         ? 15 * 60 * 1000
-        : (action.startsWith('winget_') || action.startsWith('cert_') || action === 'net_http_request' || action === 'net_ping' || action === 'net_check_remote_port' || action === 'net_trace_route' || action === 'net_scan_lan' || action === 'net_dns_deep_diagnostic' || action === 'net_intel_lookup' || action === 'net_get_portproxy_targets')
+        : action === 'ssh_install_capability'
+        ? 15 * 60 * 1000
+        : (action.startsWith('winget_') || action.startsWith('cert_') || action.startsWith('diag_') || action.startsWith('wsl_') || action === 'net_ping' || action === 'net_check_remote_port' || action === 'net_trace_route' || action === 'net_scan_lan' || action === 'net_dns_deep_diagnostic' || action === 'net_intel_lookup' || action === 'net_get_portproxy_targets')
           ? 60000
           : 15000;
       setTimeout(() => {
@@ -100,6 +102,78 @@ const IPC = {
           resolve({ success: true, message: '模拟管理员实例已启动' });
           break;
 
+        case 'diag_run': {
+          const checks = [
+            { id: 'system', name: 'Windows system', status: 'pass', summary: 'Windows 11 Pro build 26100', detail: 'Uptime: 3d 8h; PowerShell: 5.1; Admin: False' },
+            { id: 'disk', name: 'System drive', status: 'pass', summary: '186.4 GB free of 476.8 GB', detail: '39.1% available on C:' },
+            { id: 'adapter', name: 'Network adapters', status: 'pass', summary: '1 connected adapter(s)', detail: 'Ethernet: 192.168.1.108' },
+            { id: 'route', name: 'Default route', status: 'pass', summary: 'Gateway 192.168.1.1', detail: 'Interface: Ethernet; metric: 25' },
+            { id: 'dns', name: 'DNS resolution', status: 'pass', summary: `${payload.target || 'www.microsoft.com'} resolved`, detail: '23.46.120.12, 2600:140b:2::17d8:1198' },
+            { id: 'ping', name: 'Network reachability', status: 'warn', summary: 'Ping status: TimedOut', detail: 'ICMP may be blocked even when the target is reachable.' },
+            { id: 'proxy', name: 'Windows proxy', status: 'pass', summary: 'Direct connection', detail: 'No PAC URL configured' },
+            { id: 'services', name: 'Core services', status: 'pass', summary: 'Windows network services checked', detail: 'Dnscache=Running; Dhcp=Running; W32Time=Running' },
+            { id: 'reboot', name: 'Pending reboot', status: 'pass', summary: 'No restart marker found', detail: '' }
+          ];
+          resolve({
+            generatedAt: new Date().toLocaleString('zh-CN', { hour12: false }), computerName: 'DEV-WORKSTATION',
+            target: payload.target || 'www.microsoft.com', durationMs: 438,
+            summary: { pass: 8, warn: 1, error: 0, total: 9 }, checks
+          });
+          break;
+        }
+        case 'diag_export':
+          resolve({ success: true, filePath: `C:\\WinPsBox\\data\\reports\\WinPsBox-Diagnostic-demo.${payload.format === 'json' ? 'json' : 'md'}`, folder: 'C:\\WinPsBox\\data\\reports' });
+          break;
+        case 'ssh_get_status':
+          resolve({
+            clientState: 'Installed', serverState: 'NotPresent', sshAvailable: true, keygenAvailable: true,
+            sshPath: 'C:\\Windows\\System32\\OpenSSH\\ssh.exe', serviceInstalled: false,
+            serviceStatus: 'NotInstalled', serviceStartType: '', sshFolder: 'C:\\Users\\DevUser\\.ssh', isAdmin: false,
+            keys: [
+              { name: 'id_ed25519', publicPath: 'C:\\Users\\DevUser\\.ssh\\id_ed25519.pub', privateExists: true, fingerprint: '256 SHA256:7wM8QqZb4Q3jslLcN9h5fMkrJh3A8zYp dev@workstation (ED25519)', modifiedAt: '2026-08-18 09:21:04' },
+              { name: 'work_gitlab', publicPath: 'C:\\Users\\DevUser\\.ssh\\work_gitlab.pub', privateExists: true, fingerprint: '256 SHA256:E4BhvH9Gm2p8NaJX0khRtP2w4kfeM8zs dev@workstation (ED25519)', modifiedAt: '2026-07-02 15:44:28' }
+            ]
+          });
+          break;
+        case 'ssh_install_capability':
+          resolve({ success: true, state: 'Installed', restartNeeded: false });
+          break;
+        case 'ssh_service_action':
+          resolve({ success: true, status: payload.serviceAction === 'stop' ? 'Stopped' : 'Running', startType: 'Automatic' });
+          break;
+        case 'ssh_generate_key':
+          resolve({ success: true, publicPath: `C:\\Users\\DevUser\\.ssh\\${payload.keyName}.pub`, fingerprint: '256 SHA256:MockGeneratedFingerprint' });
+          break;
+        case 'ssh_read_public_key':
+          resolve({ success: true, content: `ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMockPublicKey ${payload.keyName}@WinPsBox`, path: `C:\\Users\\DevUser\\.ssh\\${payload.keyName}.pub` });
+          break;
+        case 'ssh_test_endpoint':
+          resolve({ success: true, reachable: true, latencyMs: 18.6, effective: { hostname: payload.host, user: payload.user || 'git', port: String(payload.port || 22), identityfile: '~/.ssh/id_ed25519' } });
+          break;
+        case 'ssh_open_folder':
+          resolve({ success: true, path: 'C:\\Users\\DevUser\\.ssh' });
+          break;
+        case 'wsl_get_status':
+          resolve({
+            installed: true, executable: 'C:\\Windows\\System32\\wsl.exe', defaultVersion: 2, virtualization: true, isAdmin: false,
+            distros: [
+              { id: 'ubuntu-id', name: 'Ubuntu-24.04', version: 2, state: 'Running', isDefault: true, basePath: 'C:\\Users\\DevUser\\AppData\\Local\\Packages\\Ubuntu\\LocalState' },
+              { id: 'debian-id', name: 'Debian', version: 2, state: 'Stopped', isDefault: false, basePath: 'D:\\WSL\\Debian' }
+            ]
+          });
+          break;
+        case 'wsl_action':
+          resolve({ success: true, launched: ['open', 'update', 'install'].includes(payload.wslAction) });
+          break;
+        case 'wsl_get_online':
+          resolve({ success: true, items: [
+            { name: 'Ubuntu-24.04', friendlyName: 'Ubuntu 24.04 LTS' },
+            { name: 'Debian', friendlyName: 'Debian GNU/Linux' },
+            { name: 'kali-linux', friendlyName: 'Kali Linux Rolling' },
+            { name: 'openSUSE-Tumbleweed', friendlyName: 'openSUSE Tumbleweed' }
+          ] });
+          break;
+
         // Mock Network Tools
         case 'net_get_local_ports':
           resolve([
@@ -134,17 +208,6 @@ const IPC = {
               { seq: 3, ip: '180.101.50.242', timeMs: 23, ttl: 53, status: 'Success' },
               { seq: 4, ip: '180.101.50.242', timeMs: 22, ttl: 53, status: 'Success' }
             ]
-          });
-          break;
-        case 'net_http_request':
-          resolve({
-            success: true,
-            statusCode: 200,
-            statusText: 'OK',
-            headers: { 'content-type': 'application/json; charset=utf-8', 'server': 'MockServer/1.0' },
-            body: JSON.stringify({ message: 'Hello from mock HTTP response', timestamp: Date.now(), url: payload.url }, null, 2),
-            timeMs: 86.4,
-            sizeBytes: 128
           });
           break;
         case 'net_tcp_connect': {
@@ -325,14 +388,6 @@ const IPC = {
         case 'sys_set_env_var':
         case 'sys_delete_env_var':
           resolve({ success: true });
-          break;
-        case 'sys_get_processes':
-          resolve([
-            { pid: 4, name: 'System', memoryMB: 12.4, cpu: 1.2, responding: true, path: '', description: 'NT Kernel' },
-            { pid: 1024, name: 'powershell', memoryMB: 128.5, cpu: 0.5, responding: true, path: 'C:\\Windows\\System32\\powershell.exe', description: 'Windows PowerShell' },
-            { pid: 2450, name: 'msedge', memoryMB: 480.2, cpu: 4.8, responding: true, path: 'C:\\Program Files\\Microsoft\\Edge\\msedge.exe', description: 'Microsoft Edge' },
-            { pid: 3820, name: 'Code', memoryMB: 320.0, cpu: 2.1, responding: true, path: 'C:\\Users\\User\\AppData\\Local\\Programs\\VSCode\\Code.exe', description: 'Visual Studio Code' }
-          ]);
           break;
         case 'sys_kill_process':
           resolve({ success: true, message: `Process ${payload.pid} terminated (Mock)` });
@@ -519,21 +574,6 @@ const IPC = {
             message: payload.enabled ? `系统代理已开启: ${payload.server}` : '系统代理已关闭'
           });
           break;
-        case 'net_start_file_server':
-          resolve({
-            success: true,
-            running: true,
-            port: payload.port || 8000,
-            path: payload.path || 'C:\\Users\\User\\Downloads',
-            urls: [`http://192.168.1.108:${payload.port || 8000}/`, `http://127.0.0.1:${payload.port || 8000}/`]
-          });
-          break;
-        case 'net_stop_file_server':
-          resolve({ success: true, running: false });
-          break;
-        case 'net_get_file_server_status':
-          resolve({ success: true, running: false, port: 8000, path: '', urls: [] });
-          break;
         case 'net_get_route_table':
           resolve([
             { destination: '0.0.0.0/0', nextHop: '192.168.1.1', interfaceAlias: '以太网', interfaceIndex: 12, metric: 25, ifMetric: 25, protocol: 'NetMgmt' },
@@ -571,17 +611,6 @@ const IPC = {
         case 'sys_set_service_start_type':
           resolve({ success: true, message: `服务 [${payload.name}] 启动类型已更新为 [${payload.startType}] (Mock)` });
           break;
-        case 'sys_get_startup_items':
-          resolve([
-            { id: 'hkcu_OneDrive', name: 'Microsoft OneDrive', command: '"C:\\Users\\User\\AppData\\Local\\Microsoft\\OneDrive\\OneDrive.exe" /background', targetPath: 'C:\\Users\\User\\AppData\\Local\\Microsoft\\OneDrive\\OneDrive.exe', locationType: '注册表 (当前用户)', locationPath: 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run', enabled: true, fileExists: true },
-            { id: 'hkcu_Discord', name: 'Discord', command: 'C:\\Users\\User\\AppData\\Local\\Discord\\Update.exe --processStart Discord.exe', targetPath: 'C:\\Users\\User\\AppData\\Local\\Discord\\Update.exe', locationType: '注册表 (当前用户)', locationPath: 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run', enabled: true, fileExists: true },
-            { id: 'hklm_SecurityHealth', name: 'SecurityHealth', command: '%windir%\\system32\\SecurityHealthSystray.exe', targetPath: 'C:\\Windows\\system32\\SecurityHealthSystray.exe', locationType: '注册表 (系统所有用户)', locationPath: 'HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run', enabled: true, fileExists: true },
-            { id: 'folder_user_Docker', name: 'Docker Desktop.lnk', command: 'C:\\Program Files\\Docker\\Docker\\Docker Desktop.exe', targetPath: 'C:\\Program Files\\Docker\\Docker\\Docker Desktop.exe', locationType: '启动文件夹 (用户)', locationPath: 'C:\\Users\\User\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Startup', enabled: true, fileExists: true }
-          ]);
-          break;
-        case 'sys_remove_startup_item':
-          resolve({ success: true, message: `已移除自启动项 [${payload.name}] (Mock)` });
-          break;
         case 'sys_get_file_locks':
           resolve({
             success: true,
@@ -592,47 +621,6 @@ const IPC = {
               { pid: 3820, name: 'Code.exe', title: 'WinPsBox - Visual Studio Code', path: 'C:\\Users\\User\\AppData\\Local\\Programs\\VSCode\\Code.exe', memoryMB: 320.5 }
             ]
           });
-          break;
-        case 'sys_get_hardware_specs':
-          resolve({
-            success: true,
-            cpu: { name: '13th Gen Intel(R) Core(TM) i7-13700K', manufacturer: 'GenuineIntel', cores: 16, threads: 24, maxClockSpeedMHz: 3400, socket: 'LGA1700', loadPercent: 12 },
-            memory: {
-              totalGB: 32.0,
-              freeGB: 18.4,
-              usedGB: 13.6,
-              percentUsed: 42.5,
-              slots: [
-                { slot: 'DIMM 1', capacityGB: 16.0, speedMHz: 6000, manufacturer: 'Kingston', partNumber: 'KF560C36-16' },
-                { slot: 'DIMM 3', capacityGB: 16.0, speedMHz: 6000, manufacturer: 'Kingston', partNumber: 'KF560C36-16' }
-              ]
-            },
-            disks: [
-              { drive: 'C:', volumeName: '系统盘 (Windows)', fileSystem: 'NTFS', totalGB: 512.0, freeGB: 284.5, usedGB: 227.5, percentUsed: 44.4 },
-              { drive: 'D:', volumeName: '工作数据 (Data)', fileSystem: 'NTFS', totalGB: 1024.0, freeGB: 650.2, usedGB: 373.8, percentUsed: 36.5 }
-            ],
-            physicalDisks: [
-              { model: 'Samsung SSD 980 PRO 1TB', sizeGB: 1000.0, interfaceType: 'NVMe', mediaType: 'SSD' }
-            ],
-            gpus: [
-              { name: 'NVIDIA GeForce RTX 4070', driverVersion: '551.86', memoryMB: 12288, status: 'OK' }
-            ],
-            os: {
-              caption: 'Microsoft Windows 11 Pro 64-Bit',
-              version: '10.0.22631',
-              buildNumber: '22631.3296',
-              architecture: '64-bit',
-              installDate: '2024-01-10 14:22:00',
-              lastBootTime: '2026-08-16 09:12:00',
-              uptime: '2 天 6 小时 44 分钟',
-              computerName: 'DEV-WORKSTATION',
-              userName: 'Developer',
-              isAdmin: true
-            }
-          });
-          break;
-        case 'sys_launch_shortcut':
-          resolve({ success: true, message: `已成功调起系统工具: ${payload.toolKey} (Mock)` });
           break;
         case 'sys_get_scheduled_tasks': {
           const saved = localStorage.getItem('mock_scheduled_tasks');

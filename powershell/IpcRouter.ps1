@@ -131,22 +131,6 @@ function Register-AppWebViewHandlers($webView) {
                         $timeout = if ($payload.timeoutMs) { [int]($payload.timeoutMs) } else { 2000 }
                         $response.data = Test-PingAndDns -targetHost $targetHost -count $count -timeoutMs $timeout
                     }
-                    "net_http_request" {
-                        $method = [string]($payload.method)
-                        $url = [string]($payload.url)
-                        $headers = $payload.headers
-                        $body = [string]($payload.body)
-                        $timeoutSec = if ($payload.timeoutSec) { [int]($payload.timeoutSec) } else { 30 }
-                        $res = Invoke-CustomHttpRequest -method $method -url $url -headers $headers -body $body -timeoutSec $timeoutSec
-                        if ($res.success) {
-                            $response.data = $res
-                        } else {
-                            $response.success = $false
-                            $response.data = $res
-                            $response.error = $res.error
-                        }
-                    }
-
                     # Local development certificates
                     "cert_get_defaults" {
                         $response.data = Get-LocalDevCertificateDefaults
@@ -193,6 +177,57 @@ function Register-AppWebViewHandlers($webView) {
                     }
                     "net_intel_lookup" {
                         $res = Get-NetworkIntelligence -target ([string]$payload.target)
+                        if ($res.success) { $response.data = $res } else { $response.success = $false; $response.error = $res.error }
+                    }
+
+                    # Diagnostic reports
+                    "diag_run" {
+                        $response.data = Invoke-OneClickDiagnostic -target ([string]$payload.target)
+                    }
+                    "diag_export" {
+                        $res = Save-OneClickDiagnosticReport -report $payload.report -format ([string]$payload.format)
+                        if ($res.success) { $response.data = $res } else { $response.success = $false; $response.error = $res.error }
+                    }
+
+                    # OpenSSH manager
+                    "ssh_get_status" {
+                        $response.data = Get-OpenSshManagerState
+                    }
+                    "ssh_install_capability" {
+                        $res = Install-OpenSshCapability -component ([string]$payload.component)
+                        if ($res.success) { $response.data = $res } else { $response.success = $false; $response.error = $res.error }
+                    }
+                    "ssh_service_action" {
+                        $res = Set-OpenSshService -action ([string]$payload.serviceAction)
+                        if ($res.success) { $response.data = $res } else { $response.success = $false; $response.error = $res.error }
+                    }
+                    "ssh_generate_key" {
+                        $res = New-OpenSshKey -algorithm ([string]$payload.algorithm) -keyName ([string]$payload.keyName) -comment ([string]$payload.comment)
+                        if ($res.success) { $response.data = $res } else { $response.success = $false; $response.error = $res.error }
+                    }
+                    "ssh_read_public_key" {
+                        $res = Get-OpenSshPublicKey -keyName ([string]$payload.keyName)
+                        if ($res.success) { $response.data = $res } else { $response.success = $false; $response.error = $res.error }
+                    }
+                    "ssh_test_endpoint" {
+                        $res = Test-OpenSshEndpoint -hostName ([string]$payload.host) -port ([int]$payload.port) -userName ([string]$payload.user)
+                        if ($res.success) { $response.data = $res } else { $response.success = $false; $response.error = $res.error }
+                    }
+                    "ssh_open_folder" {
+                        $res = Open-OpenSshFolder
+                        if ($res.success) { $response.data = $res } else { $response.success = $false; $response.error = $res.error }
+                    }
+
+                    # WSL manager
+                    "wsl_get_status" {
+                        $response.data = Get-WslManagerState
+                    }
+                    "wsl_action" {
+                        $res = Invoke-WslManagerAction -action ([string]$payload.wslAction) -distro ([string]$payload.distro) -version ([int]$payload.version)
+                        if ($res.success) { $response.data = $res } else { $response.success = $false; $response.error = $res.error }
+                    }
+                    "wsl_get_online" {
+                        $res = Get-WslOnlineDistributions
                         if ($res.success) { $response.data = $res } else { $response.success = $false; $response.error = $res.error }
                     }
     
@@ -278,21 +313,6 @@ function Register-AppWebViewHandlers($webView) {
                         if ($res.success) { $response.data = $res } else { $response.success = $false; $response.error = $res.error }
                     }
     
-                    # 5. Mini HTTP File Server
-                    "net_start_file_server" {
-                        $folderPath = [string]($payload.path)
-                        $port = if ($payload.port) { [int]($payload.port) } else { 8000 }
-                        $res = Start-HttpFileServer -folderPath $folderPath -port $port
-                        if ($res.success) { $response.data = $res } else { $response.success = $false; $response.error = $res.error }
-                    }
-                    "net_stop_file_server" {
-                        $res = Stop-HttpFileServer
-                        if ($res.success) { $response.data = $res } else { $response.success = $false; $response.error = $res.error }
-                    }
-                    "net_get_file_server_status" {
-                        $response.data = Get-HttpFileServerStatus
-                    }
-    
                     # 6. Route & Traceroute
                     "net_get_route_table" {
                         $response.data = Get-SystemRouteList
@@ -320,9 +340,6 @@ function Register-AppWebViewHandlers($webView) {
                         $scope = [string]($payload.scope)
                         $res = Delete-EnvVar -name $name -scope $scope
                         if (-not $res.success) { $response.success = $false; $response.error = $res.error }
-                    }
-                    "sys_get_processes" {
-                        $response.data = Get-ProcessList
                     }
                     "sys_kill_process" {
                         $pidToKill = [int]($payload.pid)
@@ -356,19 +373,6 @@ function Register-AppWebViewHandlers($webView) {
                         if ($res.success) { $response.data = $res } else { $response.success = $false; $response.error = $res.error }
                     }
     
-                    # 8. Startup Items Auditor
-                    "sys_get_startup_items" {
-                        $response.data = Get-AllStartupItems
-                    }
-                    "sys_remove_startup_item" {
-                        $id = [string]($payload.id)
-                        $locType = [string]($payload.locationType)
-                        $locPath = [string]($payload.locationPath)
-                        $name = [string]($payload.name)
-                        $res = Remove-StartupItemEntry -id $id -locationType $locType -locationPath $locPath -name $name
-                        if ($res.success) { $response.data = $res } else { $response.success = $false; $response.error = $res.error }
-                    }
-    
                     # 9. File Lock Hunter
                     "sys_get_file_locks" {
                         $path = [string]($payload.path)
@@ -376,19 +380,6 @@ function Register-AppWebViewHandlers($webView) {
                         if ($res.success) { $response.data = $res } else { $response.success = $false; $response.error = $res.error }
                     }
     
-                    # 10. Hardware Specs & Health
-                    "sys_get_hardware_specs" {
-                        $res = Get-ComprehensiveSpecs
-                        if ($res.success) { $response.data = $res } else { $response.success = $false; $response.error = $res.error }
-                    }
-    
-                    # 11. System Shortcuts Launcher
-                    "sys_launch_shortcut" {
-                        $key = [string]($payload.toolKey)
-                        $res = Launch-SysUtility -toolKey $key
-                        if ($res.success) { $response.data = $res } else { $response.success = $false; $response.error = $res.error }
-                    }
-
                     # 12. Scheduled Tasks Center
                     "sys_get_scheduled_tasks" {
                         $response.data = Get-ToolboxScheduledTasks

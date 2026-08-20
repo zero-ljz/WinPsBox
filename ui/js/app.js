@@ -46,7 +46,13 @@ const ToolRegistry = {
     { id: 'scheduled-tasks', title: '定时任务中心', category: 'system', categoryName: '系统运维', icon: 'calendar-clock', desc: '定时关机、重启、睡眠、锁屏或运行程序，支持单次与每日计划', tags: ['系统', '定时', '计划任务', '自动化'] },
     { id: 'context-menu-manager', title: '右键菜单管理器', category: 'system', categoryName: '系统运维', icon: 'mouse-pointer-click', desc: '扫描并启用或禁用文件、文件夹、桌面与磁盘右键菜单项目', tags: ['系统', '右键菜单', '注册表', '优化'] },
     { id: 'env-viewer', title: '系统环境变量管理', category: 'system', categoryName: '系统运维', icon: 'layers', desc: '查看、检索与快捷编辑 Windows 用户与系统 PATH 及环境变量', tags: ['系统', '环境变量', '运维'] },
-    { id: 'hosts-editor', title: 'Hosts 快速切换器', category: 'system', categoryName: '系统运维', icon: 'server', desc: '快速读取与编辑系统 Hosts 映射规则，支持规则一键切换与备份', tags: ['系统', '网络', 'Hosts'] }
+    { id: 'hosts-editor', title: 'Hosts 快速切换器', category: 'system', categoryName: '系统运维', icon: 'server', desc: '快速读取与编辑系统 Hosts 映射规则，支持规则一键切换与备份', tags: ['系统', '网络', 'Hosts'] },
+    { id: 'diagnostic-report-center', title: '一键诊断与报告中心', category: 'system', categoryName: '系统运维', icon: 'stethoscope', desc: '集中检查系统、磁盘、网络、DNS、代理与关键服务，并导出诊断报告', tags: ['系统', '网络', '诊断', '运维'] },
+
+    // Developer tools
+    { id: 'openssh-manager', title: 'SSH / OpenSSH 管理器', category: 'developer', categoryName: '开发工具', icon: 'key-round', desc: '管理 Windows OpenSSH 组件、sshd 服务和用户密钥，检查 SSH 端点连通性', tags: ['开发', 'SSH', '安全', '运维'] },
+    { id: 'wsl-manager', title: 'WSL 管理中心', category: 'developer', categoryName: '开发工具', icon: 'boxes', desc: '查看和管理 WSL 发行版、运行状态、默认版本与在线安装', tags: ['开发', 'WSL', 'Linux', '系统'] },
+    { id: 'developer-text-toolbox', title: '开发文本工具箱', category: 'developer', categoryName: '开发工具', icon: 'braces', desc: '处理 JSON、Base64、URL、JWT、时间戳、消息摘要和 UUID', tags: ['开发', 'JSON', '编码', 'JWT'] }
   ],
 
   favorites: new Set(),
@@ -75,7 +81,8 @@ const ToolRegistry = {
       all: this.tools.length,
       fav: this.favorites.size,
       network: this.tools.filter(t => t.category === 'network').length,
-      system: this.tools.filter(t => t.category === 'system').length
+      system: this.tools.filter(t => t.category === 'system').length,
+      developer: this.tools.filter(t => t.category === 'developer').length
     };
 
     for (const [cat, num] of Object.entries(counts)) {
@@ -255,6 +262,18 @@ const ToolRegistry = {
         case 'hosts-editor':
           HostsTool.render(mount);
           break;
+        case 'diagnostic-report-center':
+          DiagnosticReportTool.render(mount);
+          break;
+        case 'openssh-manager':
+          OpenSshManagerTool.render(mount);
+          break;
+        case 'wsl-manager':
+          WslManagerTool.render(mount);
+          break;
+        case 'developer-text-toolbox':
+          DeveloperTextTool.render(mount);
+          break;
 
         default:
           DefaultToolPlaceholder.render(mount, tool);
@@ -359,7 +378,8 @@ const ToolRegistry = {
       all: { name: '全部工具', icon: 'layout-grid', desc: '集合网络诊断与 Windows 系统运维实用功能' },
       fav: { name: '常用收藏', icon: 'star', desc: '已标星置顶的高频使用工具集' },
       network: { name: '网络工具', icon: 'globe', desc: '端口探测、链路诊断与 API 模拟测试' },
-      system: { name: '系统运维', icon: 'terminal-square', desc: '环境配置、系统进程与 Hosts 便捷管理' }
+      system: { name: '系统运维', icon: 'terminal-square', desc: '环境配置、系统进程与 Hosts 便捷管理' },
+      developer: { name: '开发工具', icon: 'code-2', desc: '本地开发环境、Linux 子系统与常用文本处理工具' }
     };
 
     const cur = titles[this.activeCategory] || titles.all;
