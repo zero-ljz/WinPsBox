@@ -31,6 +31,7 @@ function New-TaskWorkerResponse([bool]$success, $data = $null, [string]$errorMes
 . (Join-Path $script:PowerShellRoot "NetworkDeveloperTools.ps1")
 . (Join-Path $script:PowerShellRoot "NetworkInspectionTools.ps1")
 . (Join-Path $script:PowerShellRoot "DeveloperAdminTools.ps1")
+. (Join-Path $script:PowerShellRoot "RemoteSharingTools.ps1")
 
 $script:AppTaskProgressWriter = {
     param([int]$percent, [string]$message, [string]$detail)
@@ -58,6 +59,11 @@ try {
             $timeout = if ($payload.timeoutMs) { [int]$payload.timeoutMs } else { 2000 }
             $data = Test-PingAndDns -targetHost ([string]$payload.host) -count $count -timeoutMs $timeout
             $response = New-TaskWorkerResponse $true $data
+        }
+        "remote_test_profile" {
+            Write-AppTaskProgress 25 "正在测试远程端点"
+            $result = Test-RemoteConnectionEndpoint -profile $payload.profile
+            $response = if ($result.success) { New-TaskWorkerResponse $true $result } else { New-TaskWorkerResponse $false $null $result.error }
         }
         "net_dns_deep_diagnostic" {
             $result = Invoke-DeepDnsDiagnostic -name ([string]$payload.name) -recordType ([string]$payload.recordType)

@@ -19,6 +19,7 @@ foreach ($staleDirectory in @(Get-ChildItem -LiteralPath $script:appTaskEventRoo
 $script:backgroundAppActions = @(
     "net_check_remote_port",
     "net_ping",
+    "remote_test_profile",
     "net_dns_deep_diagnostic",
     "net_intel_lookup",
     "net_wifi_analyze",

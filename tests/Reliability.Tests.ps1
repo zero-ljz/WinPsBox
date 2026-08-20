@@ -147,3 +147,69 @@ Describe "Backend input validation and safe persistence" {
         }
     }
 }
+
+Describe "Remote connections and SMB validation" {
+    BeforeEach {
+        $script:AppRoot = $TestDrive
+        $script:dataPath = Join-Path $TestDrive "data"
+        $script:configFile = Join-Path $script:dataPath "config.json"
+        New-Item -ItemType Directory -Path $script:dataPath -Force | Out-Null
+        . (Join-Path $repoRoot "powershell\Common.ps1")
+        . (Join-Path $repoRoot "powershell\SystemTools.ps1")
+        . (Join-Path $repoRoot "powershell\RemoteSharingTools.ps1")
+    }
+
+    It "persists and removes a validated remote connection profile" {
+        $saved = Save-RemoteConnectionProfile ([PSCustomObject]@{
+            name = "Test SSH"
+            type = "ssh"
+            host = "127.0.0.1"
+            port = 22
+            userName = "tester"
+            shareName = ""
+            notes = "Pester profile"
+        })
+
+        $saved.success | Should Be $true
+        $profiles = @(Get-RemoteConnectionProfiles)
+        $profiles.Count | Should Be 1
+        $profiles[0].name | Should Be "Test SSH"
+        $profiles[0].userName | Should Be "tester"
+
+        $removed = Remove-RemoteConnectionProfile -profileId $saved.profile.id
+        $removed.success | Should Be $true
+        @(Get-RemoteConnectionProfiles).Count | Should Be 0
+    }
+
+    It "rejects unsafe remote and share names" {
+        (Test-RemoteConnectionHost "server.example.com") | Should Be $true
+        (Test-RemoteConnectionHost "server; Start-Process calc") | Should Be $false
+        (Test-SmbShareName "Projects") | Should Be $true
+        (Test-SmbShareName "..\Projects") | Should Be $false
+
+        $result = Save-RemoteConnectionProfile ([PSCustomObject]@{
+            name = "Unsafe"
+            type = "rdp"
+            host = "server;calc"
+            port = 3389
+        })
+        $result.success | Should Be $false
+        @(Get-RemoteConnectionProfiles).Count | Should Be 0
+    }
+
+    It "tests a reachable remote endpoint" {
+        $listener = New-Object System.Net.Sockets.TcpListener([System.Net.IPAddress]::Loopback, 0)
+        $listener.Start()
+        try {
+            $port = ([System.Net.IPEndPoint]$listener.LocalEndpoint).Port
+            $result = Test-RemoteConnectionEndpoint ([PSCustomObject]@{ host = "127.0.0.1"; port = $port })
+
+            $result.success | Should Be $true
+            $result.reachable | Should Be $true
+            $result.port | Should Be $port
+        }
+        finally {
+            $listener.Stop()
+        }
+    }
+}

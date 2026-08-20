@@ -95,9 +95,9 @@ async function closeServer(server) {
         ])
       )
     }));
-    assert.equal(state.registered, 22);
+    assert.equal(state.registered, 24);
     assert.equal(state.rendered, state.registered);
-    assert.deepEqual(state.categoryCounts, { all: 22, network: 11, system: 8, developer: 3 });
+    assert.deepEqual(state.categoryCounts, { all: 24, network: 11, system: 10, developer: 3 });
     return state;
   });
 
@@ -165,7 +165,7 @@ async function closeServer(server) {
     assert.equal(await page.locator('#viewTools').isVisible(), true);
   });
 
-  await step('22 个工具均可打开并渲染真实工作区', async () => {
+  await step('24 个工具均可打开并渲染真实工作区', async () => {
     const tools = await page.evaluate(() => ToolRegistry.tools.map(tool => ({ id: tool.id, title: tool.title })));
     const rendered = [];
     for (const tool of tools) {
@@ -205,6 +205,8 @@ async function closeServer(server) {
     ['sys_get_services'],
     ['sys_get_scheduled_tasks'],
     ['sys_get_context_menu_items'],
+    ['remote_get_profiles'],
+    ['smb_get_state'],
     ['winget_get_status', {}, 180000],
     ['winget_get_packages', { mode: 'installed' }, 300000],
     ['winget_get_packages', { mode: 'updates' }, 300000],
@@ -221,6 +223,35 @@ async function closeServer(server) {
       return Array.isArray(data) ? { count: data.length } : data;
     });
   }
+
+  await step('远程连接配置可保存、测试并删除', async () => {
+    const server = net.createServer();
+    const port = await listen(server);
+    let profileId = '';
+    try {
+      const saved = assertIpcSuccess(await callIpc(page, 'remote_save_profile', {
+        profile: { name: 'WinPsBox E2E SSH', type: 'ssh', host: '127.0.0.1', port, userName: 'tester', shareName: '', notes: 'isolated test' }
+      }), 'remote_save_profile');
+      profileId = saved.profile.id;
+      assert.ok(profileId);
+
+      const profiles = assertIpcSuccess(await callIpc(page, 'remote_get_profiles'), 'remote_get_profiles');
+      assert.equal(profiles.some(profile => profile.id === profileId), true, JSON.stringify({ profileId, profiles }));
+
+      const tested = assertIpcSuccess(await callIpc(page, 'remote_test_profile', { profile: saved.profile }), 'remote_test_profile');
+      assert.equal(tested.reachable, true);
+      assert.equal(tested.port, port);
+
+      assertIpcSuccess(await callIpc(page, 'remote_remove_profile', { id: profileId }), 'remote_remove_profile');
+      profileId = '';
+      const remaining = assertIpcSuccess(await callIpc(page, 'remote_get_profiles'), 'remote_get_profiles');
+      assert.equal(remaining.some(profile => profile.name === 'WinPsBox E2E SSH'), false);
+      return { port, persisted: true, tested: true, removed: true };
+    } finally {
+      if (profileId) await callIpc(page, 'remote_remove_profile', { id: profileId });
+      await closeServer(server);
+    }
+  });
 
   await step('真实网络诊断、局域网扫描和报告导出', async () => {
     const adapters = assertIpcSuccess(await callIpc(page, 'net_get_adapters'), 'net_get_adapters');

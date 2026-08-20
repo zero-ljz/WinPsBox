@@ -16,7 +16,7 @@ const IPC = {
   reqCounter: 0,
   isWebView: Boolean(window.chrome && window.chrome.webview),
   backgroundActions: new Set([
-    'net_check_remote_port', 'net_ping', 'net_dns_deep_diagnostic', 'net_intel_lookup',
+    'net_check_remote_port', 'net_ping', 'remote_test_profile', 'net_dns_deep_diagnostic', 'net_intel_lookup',
     'diag_run', 'ssh_get_status', 'ssh_install_capability', 'wsl_get_status',
     'wsl_get_online', 'net_get_portproxy_targets', 'net_scan_lan', 'net_check_ssl',
     'net_trace_route', 'net_wifi_analyze', 'net_http_redirect_trace'
@@ -107,7 +107,7 @@ const IPC = {
       return Math.min(10 * 60 * 1000, Math.max(90 * 1000, (redirects + 1) * operationTimeout + 30 * 1000));
     }
     if (this.isBackgroundAction(action)) return 2 * 60 * 1000;
-    if (action.startsWith('cert_') || action === 'sys_elevate_app') return 5 * 60 * 1000;
+    if (action.startsWith('cert_') || action === 'sys_elevate_app' || action === 'smb_operate') return 5 * 60 * 1000;
     if (action.startsWith('sys_set_') || action === 'sys_save_hosts' || action.startsWith('net_set_') || action.startsWith('net_add_') || action.startsWith('net_remove_')) {
       return 2 * 60 * 1000;
     }
@@ -226,6 +226,49 @@ const IPC = {
         case 'sys_elevate_app':
           localStorage.setItem('mock_admin', 'true');
           resolve({ success: true, message: '模拟管理员实例已启动' });
+          break;
+
+        case 'remote_get_profiles':
+          resolve(JSON.parse(localStorage.getItem('mock_remote_profiles') || '[]'));
+          break;
+        case 'remote_save_profile': {
+          const profiles = JSON.parse(localStorage.getItem('mock_remote_profiles') || '[]');
+          const profile = { ...payload.profile, id: payload.profile.id || crypto.randomUUID(), updatedAt: new Date().toISOString() };
+          localStorage.setItem('mock_remote_profiles', JSON.stringify([...profiles.filter(item => item.id !== profile.id), profile]));
+          resolve({ success: true, profile });
+          break;
+        }
+        case 'remote_remove_profile': {
+          const profiles = JSON.parse(localStorage.getItem('mock_remote_profiles') || '[]');
+          localStorage.setItem('mock_remote_profiles', JSON.stringify(profiles.filter(item => item.id !== payload.id)));
+          resolve({ success: true, id: payload.id });
+          break;
+        }
+        case 'remote_test_profile':
+          resolve({ success: true, reachable: true, host: payload.profile.host, port: payload.profile.port, addresses: ['192.168.1.20'], latencyMs: 12.4 });
+          break;
+        case 'remote_open_profile':
+          resolve({ success: true, launched: true, type: payload.profile.type, target: payload.profile.type === 'smb' ? `\\\\${payload.profile.host}\\${payload.profile.shareName}` : `${payload.profile.host}:${payload.profile.port}` });
+          break;
+        case 'smb_get_state':
+          resolve({
+            available: true, isAdmin: false, computerName: 'DEV-WORKSTATION', currentUser: 'WORKGROUP\\DevUser', sessionError: '', openFileError: '',
+            shares: [
+              { name: 'Projects', path: 'D:\\Projects', description: '开发项目', currentUsers: 1, special: false, uncPath: '\\\\DEV-WORKSTATION\\Projects', access: [{ accountName: 'WORKGROUP\\DevUser', accessControlType: 'Allow', accessRight: 'Full' }] },
+              { name: 'C$', path: 'C:\\', description: '默认共享', currentUsers: 0, special: true, uncPath: '\\\\DEV-WORKSTATION\\C$', access: [] }
+            ],
+            sessions: [{ sessionId: '101', clientComputerName: '192.168.1.30', clientUserName: 'WORKGROUP\\User', numOpens: 1, secondsIdle: 42 }],
+            openFiles: [{ fileId: '201', sessionId: '101', clientComputerName: '192.168.1.30', clientUserName: 'WORKGROUP\\User', path: 'D:\\Projects\\README.md', shareRelativePath: 'README.md', locks: 0 }]
+          });
+          break;
+        case 'smb_operate':
+          resolve({ success: true, message: '模拟 SMB 操作已完成' });
+          break;
+        case 'smb_select_folder':
+          resolve({ success: true, cancelled: false, path: 'D:\\Projects' });
+          break;
+        case 'smb_open_location':
+          resolve({ success: true, path: payload.path });
           break;
 
         case 'diag_run': {

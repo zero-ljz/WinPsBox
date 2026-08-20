@@ -385,6 +385,44 @@ function Register-AppWebViewHandlers($webView) {
                         $res = Set-WinServiceStartMode -serviceName $name -startType $startType
                         if ($res.success) { $response.data = $res } else { $response.success = $false; $response.error = $res.error }
                     }
+
+                    # Remote connections center
+                    "remote_get_profiles" {
+                        $response.data = @(Get-RemoteConnectionProfiles)
+                    }
+                    "remote_save_profile" {
+                        $res = Save-RemoteConnectionProfile -profile $payload.profile
+                        if ($res.success) { $response.data = $res } else { $response.success = $false; $response.error = $res.error }
+                    }
+                    "remote_remove_profile" {
+                        $res = Remove-RemoteConnectionProfile -profileId ([string]$payload.id)
+                        if ($res.success) { $response.data = $res } else { $response.success = $false; $response.error = $res.error }
+                    }
+                    "remote_test_profile" {
+                        $res = Test-RemoteConnectionEndpoint -profile $payload.profile
+                        if ($res.success) { $response.data = $res } else { $response.success = $false; $response.error = $res.error }
+                    }
+                    "remote_open_profile" {
+                        $res = Open-RemoteConnectionProfile -profile $payload.profile
+                        if ($res.success) { $response.data = $res } else { $response.success = $false; $response.error = $res.error }
+                    }
+
+                    # Windows shared folders manager
+                    "smb_get_state" {
+                        $response.data = Get-SmbShareManagerState
+                    }
+                    "smb_operate" {
+                        $res = Invoke-SmbManagerOperation -operation ([string]$payload.operation) -payload $payload.parameters
+                        if ($res.success) { $response.data = $res } else { $response.success = $false; $response.error = $res.error }
+                    }
+                    "smb_select_folder" {
+                        $res = Select-SmbShareFolder
+                        if ($res.success) { $response.data = $res } else { $response.success = $false; $response.error = $res.error }
+                    }
+                    "smb_open_location" {
+                        $res = Open-SmbShareLocation -path ([string]$payload.path)
+                        if ($res.success) { $response.data = $res } else { $response.success = $false; $response.error = $res.error }
+                    }
     
                     # 9. File Lock Hunter
                     "sys_get_file_locks" {

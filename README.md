@@ -29,6 +29,8 @@
 - **Context Menu Manager**: Inspect, enable, or disable context menu items for files, folders, and desktop background.
 - **Environment Variables**: View, search, and edit User and System PATH and environment variables cleanly.
 - **Hosts Quick Switcher**: Easily read, switch, and edit system Hosts rules with backup and restore support.
+- **Remote Connection Center**: Save, test, and launch Remote Desktop, SSH, and Windows network share connections without storing passwords.
+- **Shared Folder Manager**: Create and remove Windows SMB shares, manage access rights, active sessions, and remotely opened files.
 - **Diagnostic Report Center**: Run a single system, storage, network, DNS, proxy, and service health check and export Markdown or JSON reports.
 
 ### Developer Tools

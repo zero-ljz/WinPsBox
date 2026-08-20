@@ -49,6 +49,8 @@ const ToolRegistry = {
     { id: 'context-menu-manager', title: '右键菜单管理器', category: 'system', categoryName: '系统运维', icon: 'mouse-pointer-click', desc: '扫描并启用或禁用文件、文件夹、桌面与磁盘右键菜单项目', tags: ['系统', '右键菜单', '注册表', '优化'] },
     { id: 'env-viewer', title: '系统环境变量管理', category: 'system', categoryName: '系统运维', icon: 'layers', desc: '查看、检索与快捷编辑 Windows 用户与系统 PATH 及环境变量', tags: ['系统', '环境变量', '运维'] },
     { id: 'hosts-editor', title: 'Hosts 快速切换器', category: 'system', categoryName: '系统运维', icon: 'server', desc: '快速读取与编辑系统 Hosts 映射规则，支持规则一键切换与备份', tags: ['系统', '网络', 'Hosts'] },
+    { id: 'remote-connection-center', title: '远程连接中心', category: 'system', categoryName: '系统运维', icon: 'monitor-up', desc: '集中保存、测试并启动远程桌面、SSH 与 Windows 网络共享连接', tags: ['系统', '远程', 'RDP', 'SSH', 'SMB'] },
+    { id: 'shared-folder-manager', title: '共享文件夹管理器', category: 'system', categoryName: '系统运维', icon: 'folder-network', desc: '管理 Windows SMB 共享、访问权限、活动会话与远程打开文件', tags: ['系统', '网络', '共享', 'SMB', '权限'] },
     { id: 'diagnostic-report-center', title: '一键诊断与报告中心', category: 'system', categoryName: '系统运维', icon: 'stethoscope', desc: '集中检查系统、磁盘、网络、DNS、代理与关键服务，并导出诊断报告', tags: ['系统', '网络', '诊断', '运维'] },
 
     // Developer tools
@@ -272,6 +274,12 @@ const ToolRegistry = {
           break;
         case 'diagnostic-report-center':
           DiagnosticReportTool.render(mount);
+          break;
+        case 'remote-connection-center':
+          RemoteConnectionCenterTool.render(mount);
+          break;
+        case 'shared-folder-manager':
+          SharedFolderManagerTool.render(mount);
           break;
         case 'openssh-manager':
           OpenSshManagerTool.render(mount);
